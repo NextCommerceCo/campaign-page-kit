@@ -10,7 +10,8 @@
     "campaign-build": "./lib/actions/build.js",
     "campaign-clone": "./lib/actions/clone.js",
     "campaign-config": "./lib/actions/configure.js",
-    "campaign-compress": "./lib/actions/compress.js"
+    "campaign-compress": "./lib/actions/compress.js",
+    "campaign-migrate": "./lib/actions/migrate.js"
   },
   "files": [
     "index.js",

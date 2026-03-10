@@ -136,6 +136,90 @@ test('renderPage: campaign_link resolves index.html to campaign root', async () 
     assert.equal(html, '/test-campaign/');
 });
 
+test('renderPage: campaign_link passes through hash anchors', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "#section" | campaign_link }}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, '#section');
+});
+
+test('renderPage: campaign_link passes through absolute paths', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "/some/path/" | campaign_link }}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, '/some/path/');
+});
+
+test('renderPage: campaign_link passes through absolute URLs', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "https://external.com/page" | campaign_link }}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, 'https://external.com/page');
+});
+
+test('renderPage: campaign_asset returns empty string for empty filename', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "" | campaign_asset }}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, '');
+});
+
+test('renderPage: campaign_link returns empty string for empty filename', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "" | campaign_link }}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, '');
+});
+
+test('renderPage: campaign_asset returns filename when no campaign in context', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "style.css" | campaign_asset }}',
+        frontmatter: {},
+        campaign: null,
+        pageData: { url: '/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, 'style.css');
+});
+
+test('renderPage: campaign_link returns filename when no campaign in context', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{{ "page.html" | campaign_link }}',
+        frontmatter: {},
+        campaign: null,
+        pageData: { url: '/' },
+        layoutSrc: null,
+    });
+    assert.equal(html, 'page.html');
+});
+
 // ---------------------------------------------------------------------------
 // campaign_include — tag tests (real filesystem, isolated tmp dir)
 // ---------------------------------------------------------------------------
@@ -230,6 +314,38 @@ test('campaign_include: missing file logs error and renders empty', async () => 
     });
 });
 
+test('campaign_include: boolean true arg is passed as true', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, 'test-campaign/_includes/flag.html',
+            '{% if include.visible %}yes{% else %}no{% endif %}');
+        const engine = createEngine(dir);
+        const html = await renderPage(engine, {
+            body: "{% campaign_include 'flag.html' visible=true %}",
+            frontmatter: {},
+            campaign: CAMPAIGN,
+            pageData: { url: '/test-campaign/' },
+            layoutSrc: null,
+        });
+        assert.equal(html.trim(), 'yes');
+    });
+});
+
+test('campaign_include: boolean false arg is passed as false', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, 'test-campaign/_includes/flag.html',
+            '{% if include.visible %}yes{% else %}no{% endif %}');
+        const engine = createEngine(dir);
+        const html = await renderPage(engine, {
+            body: "{% campaign_include 'flag.html' visible=false %}",
+            frontmatter: {},
+            campaign: CAMPAIGN,
+            pageData: { url: '/test-campaign/' },
+            layoutSrc: null,
+        });
+        assert.equal(html.trim(), 'no');
+    });
+});
+
 // ---------------------------------------------------------------------------
 // build() — integration tests
 // ---------------------------------------------------------------------------
@@ -245,7 +361,7 @@ test('build: builds an index page with layout', async () => {
 
         const { built, errors } = await build({
             srcPath, outputPath,
-            campaigns: [CAMPAIGN],
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
         });
 
         assert.equal(built, 1);
@@ -266,7 +382,7 @@ test('build: named page outputs to pretty URL path', async () => {
         writeFixture(srcPath, 'test-campaign/checkout.html',
             '---\n---\n<p>checkout</p>');
 
-        const { built } = await build({ srcPath, outputPath, campaigns: [CAMPAIGN] });
+        const { built } = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
 
         assert.equal(built, 1);
         assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'checkout', 'index.html')));
@@ -280,7 +396,7 @@ test('build: skips page with no matching campaign', async () => {
 
         writeFixture(srcPath, 'unknown-campaign/index.html', '---\n---\n<p>hi</p>');
 
-        const { built, errors } = await build({ srcPath, outputPath, campaigns: [CAMPAIGN] });
+        const { built, errors } = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
 
         assert.equal(built, 0);
         assert.equal(errors, 0);
@@ -296,8 +412,66 @@ test('build: copies assets directory to output', async () => {
         writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n<p>hi</p>');
         writeFixture(srcPath, 'test-campaign/assets/style.css', 'body { margin: 0; }');
 
-        await build({ srcPath, outputPath, campaigns: [CAMPAIGN] });
+        await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
 
         assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'style.css')));
+    });
+});
+
+test('build: counts render errors for invalid templates', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html',
+            '---\n---\n{% unknowntag %}');
+
+        const { built, errors } = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+        });
+
+        assert.equal(built, 0);
+        assert.equal(errors, 1);
+    });
+});
+
+test('build: uses explicit files list instead of discovery', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/_layouts/base.html', BASE_LAYOUT);
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n<p>index</p>');
+        writeFixture(srcPath, 'test-campaign/other.html', '---\n---\n<p>other</p>');
+
+        const { built } = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            files: ['test-campaign/index.html'],
+        });
+
+        assert.equal(built, 1);
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'index.html')));
+        assert.ok(!fs.existsSync(path.join(outputPath, 'test-campaign', 'other', 'index.html')));
+    });
+});
+
+test('build: renders page without layout when none exists', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n<p>no layout</p>');
+
+        const { built, errors } = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+        });
+
+        assert.equal(built, 1);
+        assert.equal(errors, 0);
+        const html = fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8');
+        assert.equal(html, '<p>no layout</p>');
     });
 });

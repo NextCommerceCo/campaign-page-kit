@@ -37,16 +37,15 @@ This will:
 
 ### 4. Add your first campaign to `_data/campaigns.json`
 
+Each entry is keyed by the campaign slug, which must match the campaign's directory name under `src/`.
+
 ```json
 {
-  "campaigns": [
-    {
-      "name": "My Campaign",
-      "slug": "my-campaign",
-      "description": "My first campaign",
-      "sdk_version": "0.3.10"
-    }
-  ]
+  "my-campaign": {
+    "name": "My Campaign",
+    "description": "My first campaign",
+    "sdk_version": "0.3.10"
+  }
 }
 ```
 
@@ -96,6 +95,7 @@ This will:
 | `npm run config` | Set the API key for a campaign |
 | `npm run compress` | Compress all images in a campaign directory |
 | `npm run compress:preview` | Preview compression savings without modifying files |
+| `npm run migrate` | Migrate `campaigns.json` from old array format to key-based format |
 
 ### Build
 
@@ -139,7 +139,7 @@ your-project/
 
 ### Key Files
 
-- **`_data/campaigns.json`** - Register all campaigns and their configuration data here
+- **`_data/campaigns.json`** - Register all campaigns and their configuration data here. Uses a key-based format where each key is the campaign slug (see below). If you have an older project using the array format, run `npm run migrate` to convert it.
 - **`src/[campaign]/_layouts/base.html`** - Campaign's base layout
 - **`src/[campaign]/assets/config.js`** - Campaign Cart SDK configuration
 
@@ -201,14 +201,11 @@ To add more context across all pages in your campaign, simply add new keys to yo
 
 ```json
 {
-  "campaigns": [
-    {
-      "slug": "starter",
-      "name": "Starter Campaign",
-      "support_email": "support@example.com",
-      "custom_headline": "Welcome to our Store!"
-    }
-  ]
+  "starter": {
+    "name": "Starter Campaign",
+    "support_email": "support@example.com",
+    "custom_headline": "Welcome to our Store!"
+  }
 }
 ```
 
