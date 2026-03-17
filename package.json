@@ -26,7 +26,16 @@
   "author": "Next Commerce",
   "license": "MIT",
   "scripts": {
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/**/*.test.js",
+    "setup": "campaign-init",
+    "start": "campaign-start",
+    "dev": "campaign-dev",
+    "build": "campaign-build",
+    "clone": "campaign-clone",
+    "config": "campaign-config",
+    "compress": "campaign-compress",
+    "compress:preview": "campaign-compress --preview",
+    "migrate": "campaign-migrate"
   },
   "type": "commonjs",
   "dependencies": {
