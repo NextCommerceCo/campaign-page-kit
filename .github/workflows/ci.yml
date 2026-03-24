@@ -20,3 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Upload coverage
+        if: matrix.node-version == 24
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/NextCommerceCo/campaign-page-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/NextCommerceCo/campaign-page-kit/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/next-campaign-page-kit)](https://www.npmjs.com/package/next-campaign-page-kit)
+[![codecov](https://codecov.io/gh/NextCommerceCo/campaign-page-kit/graph/badge.svg)](https://codecov.io/gh/NextCommerceCo/campaign-page-kit)
 
 Next Campaign Page Kit is a tool for building campaign funnels that can be hosted with any of your favorite static site hosting providers such as Netlify or Cloudflare Pages.
 
