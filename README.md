@@ -215,6 +215,32 @@ Then the context is available to use it in your templates:
 <h2>{{ campaign.custom_headline }}</h2>
 ```
 
+### Environment Variable
+
+The `environment` variable is available in all templates and indicates the current build mode. This is useful for conditionally including analytics scripts, debug tools, or other environment-specific content.
+
+| Command | Default Value |
+|---|---|
+| `npm run dev` | `development` |
+| `npm run build` | `production` |
+
+**Usage:**
+
+```liquid
+{% unless environment == "development" %}
+  <!-- Google Tag Manager -->
+  <script>...</script>
+{% endunless %}
+```
+
+**Override with `CPK_ENV`:**
+
+Set the `CPK_ENV` environment variable to override the default value. This is useful for build pipelines like Netlify or GitHub Pages where you may want a custom environment such as `staging`.
+
+```bash
+CPK_ENV=staging npm run build
+```
+
 ### Layout Resolution
 
 Layouts are automatically resolved to the campaign's `_layouts/` directory:
