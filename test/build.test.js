@@ -221,6 +221,62 @@ test('renderPage: campaign_link returns filename when no campaign in context', a
 });
 
 // ---------------------------------------------------------------------------
+// environment variable — unit tests
+// ---------------------------------------------------------------------------
+
+test('renderPage: environment variable is available in body', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '<p>{{ environment }}</p>',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+        environment: 'production',
+    });
+    assert.equal(html, '<p>production</p>');
+});
+
+test('renderPage: environment variable is available in layout', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '<p>body</p>',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: '<html>{{ environment }}:{{ content }}</html>',
+        environment: 'development',
+    });
+    assert.equal(html, '<html>development:<p>body</p></html>');
+});
+
+test('renderPage: environment supports conditional logic', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{% unless environment == "development" %}analytics{% endunless %}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+        environment: 'development',
+    });
+    assert.equal(html, '');
+});
+
+test('renderPage: environment renders analytics in production', async () => {
+    const engine = createEngine('/unused');
+    const html = await renderPage(engine, {
+        body: '{% unless environment == "development" %}analytics{% endunless %}',
+        frontmatter: {},
+        campaign: CAMPAIGN,
+        pageData: { url: '/test-campaign/' },
+        layoutSrc: null,
+        environment: 'production',
+    });
+    assert.equal(html, 'analytics');
+});
+
+// ---------------------------------------------------------------------------
 // campaign_include — tag tests (real filesystem, isolated tmp dir)
 // ---------------------------------------------------------------------------
 
@@ -454,6 +510,65 @@ test('build: uses explicit files list instead of discovery', async () => {
         assert.equal(built, 1);
         assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'index.html')));
         assert.ok(!fs.existsSync(path.join(outputPath, 'test-campaign', 'other', 'index.html')));
+    });
+});
+
+test('build: defaults environment to production', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n{{ environment }}');
+
+        await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+        });
+
+        const html = fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8');
+        assert.equal(html, 'production');
+    });
+});
+
+test('build: mode option sets environment in templates', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n{{ environment }}');
+
+        await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            mode: 'development',
+        });
+
+        const html = fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8');
+        assert.equal(html, 'development');
+    });
+});
+
+test('build: CPK_ENV overrides default environment', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n{{ environment }}');
+
+        const original = process.env.CPK_ENV;
+        process.env.CPK_ENV = 'staging';
+        try {
+            await build({
+                srcPath, outputPath,
+                campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            });
+
+            const html = fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8');
+            assert.equal(html, 'staging');
+        } finally {
+            if (original === undefined) delete process.env.CPK_ENV;
+            else process.env.CPK_ENV = original;
+        }
     });
 });
 
