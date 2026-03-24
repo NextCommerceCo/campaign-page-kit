@@ -1,3 +1,4 @@
 {
-  "exclude": ["lib/actions/**", "lib/start.js"]
+  "reporter": ["text", "lcov"],
+  "exclude": ["lib/actions/**", "lib/start.js", "test/**"]
 }
