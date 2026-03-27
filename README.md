@@ -93,8 +93,8 @@ By default the dev server starts on port `3000`. You can configure the port with
 npm run dev 8080
 
 # Flag (requires -- to pass through npm)
-npm run dev -- --port 8080
-npm run dev -- -p 8080
+npm run dev --port 8080
+npm run dev -p 8080
 
 # Environment variable
 PORT=8080 npm run dev
