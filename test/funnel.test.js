@@ -259,6 +259,33 @@ test('validateFunnel: detects dead-end non-receipt page', () => {
     assert.ok(errors.some(e => e.includes('Missing terminal') && e.includes('checkout')));
 });
 
+test('validateFunnel: detects cycle with no path to receipt', () => {
+    const graph = {
+        campaign: 'sale',
+        entryPoint: '/sale/',
+        nodes: [
+            { id: 'index', path: '/sale/', type: 'product', title: 'Home', sourceFile: 'sale/index.html' },
+            { id: 'checkout', path: '/sale/checkout/', type: 'checkout', title: 'Pay', sourceFile: 'sale/checkout.html' },
+            { id: 'upsell', path: '/sale/upsell/', type: 'upsell', title: 'Upsell', sourceFile: 'sale/upsell.html' },
+            { id: 'receipt', path: '/sale/receipt/', type: 'receipt', title: 'Done', sourceFile: 'sale/receipt.html' },
+        ],
+        edges: [
+            { source: 'index', target: 'checkout', kind: 'success' },
+            // checkout and upsell form a cycle, never reaching receipt
+            { source: 'checkout', target: 'upsell', kind: 'success' },
+            { source: 'upsell', target: 'checkout', kind: 'accept' },
+            { source: 'upsell', target: 'checkout', kind: 'decline' },
+        ],
+    };
+
+    const { errors } = validateFunnel(graph);
+    // Both checkout and upsell should be flagged — they cycle but never reach receipt
+    assert.ok(errors.some(e => e.includes('Missing terminal') && e.includes('checkout')));
+    assert.ok(errors.some(e => e.includes('Missing terminal') && e.includes('upsell')));
+    // index should also be flagged since it can't reach receipt either
+    assert.ok(errors.some(e => e.includes('Missing terminal') && e.includes('index')));
+});
+
 // ---------------------------------------------------------------------------
 // validateFunnel — asymmetric upsell
 // ---------------------------------------------------------------------------
