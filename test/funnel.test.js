@@ -55,6 +55,29 @@ test('urlToNodeId: returns null for external URLs', () => {
     assert.equal(urlToNodeId('HTTPS://EXAMPLE.COM/page', 'sale'), null);
 });
 
+test('urlToNodeId: strips query string from URL', () => {
+    assert.equal(urlToNodeId('/sale/receipt/?src=upsell', 'sale'), 'receipt');
+});
+
+test('urlToNodeId: strips fragment from URL', () => {
+    assert.equal(urlToNodeId('/sale/receipt/#done', 'sale'), 'receipt');
+});
+
+test('urlToNodeId: strips both query and fragment', () => {
+    assert.equal(urlToNodeId('/sale/checkout/?step=2#form', 'sale'), 'checkout');
+});
+
+test('urlToNodeId: returns null for protocol-relative URLs', () => {
+    assert.equal(urlToNodeId('//example.com/checkout', 'sale'), null);
+});
+
+test('urlToNodeId: returns null for non-http URI schemes', () => {
+    assert.equal(urlToNodeId('mailto:user@example.com', 'sale'), null);
+    assert.equal(urlToNodeId('tel:+1234567890', 'sale'), null);
+    assert.equal(urlToNodeId('ftp://files.example.com/data', 'sale'), null);
+    assert.equal(urlToNodeId('javascript:alert(1)', 'sale'), null);
+});
+
 // ---------------------------------------------------------------------------
 // generateFunnelMap — valid funnel
 // ---------------------------------------------------------------------------
