@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { generateFunnelMap, validateFunnel, writeFunnelJson, urlToNodeId } = require('../lib/engine/funnel');
+const { writeFunnelHtml, escapeHtml } = require('../lib/engine/funnel-visual');
 const { build } = require('../lib/engine/build');
 
 // ---------------------------------------------------------------------------
@@ -393,10 +394,11 @@ test('writeFunnelJson: writes JSON to correct path', async () => {
 // build() integration — funnel.json output
 // ---------------------------------------------------------------------------
 
-test('build: outputs funnel.json for a valid campaign', async () => {
+test('build: outputs funnel.json and funnel.html to cpkPath', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
         const outputPath = path.join(dir, '_site');
+        const cpkPath = path.join(dir, '.cpk');
 
         writeFixture(srcPath, 'sale/index.html',
             '---\ntitle: Product\npage_type: product\nnext_success_url: /sale/checkout/\n---\n<h1>Buy</h1>');
@@ -406,22 +408,30 @@ test('build: outputs funnel.json for a valid campaign', async () => {
             '---\ntitle: Thank You\npage_type: receipt\n---\n<p>Done</p>');
 
         const { built, errors } = await build({
-            srcPath, outputPath,
+            srcPath, outputPath, cpkPath,
             campaigns: { 'sale': { name: 'Summer Sale' } },
         });
 
         assert.equal(built, 3);
         assert.equal(errors, 0);
 
-        // Check funnel.json exists and is valid
-        const funnelPath = path.join(outputPath, 'sale', 'funnel.json');
-        assert.ok(fs.existsSync(funnelPath), 'funnel.json should exist');
+        // funnel.json in .cpk, NOT in _site
+        const funnelPath = path.join(cpkPath, 'sale', 'funnel.json');
+        assert.ok(fs.existsSync(funnelPath), 'funnel.json should exist in .cpk');
+        assert.ok(!fs.existsSync(path.join(outputPath, 'sale', 'funnel.json')), 'funnel.json should NOT be in _site');
 
         const funnel = JSON.parse(fs.readFileSync(funnelPath, 'utf8'));
         assert.equal(funnel.campaign, 'sale');
         assert.equal(funnel.nodes.length, 3);
         assert.equal(funnel.edges.length, 2);
         assert.equal(funnel.validation.errors.length, 0);
+
+        // funnel.html should also exist
+        const htmlPath = path.join(cpkPath, 'sale', 'funnel.html');
+        assert.ok(fs.existsSync(htmlPath), 'funnel.html should exist');
+        const html = fs.readFileSync(htmlPath, 'utf8');
+        assert.ok(html.includes('<!DOCTYPE html>'));
+        assert.ok(html.includes('"campaign":"sale"'));
     });
 });
 
@@ -429,13 +439,14 @@ test('build: funnel.json contains validation errors for broken funnel', async ()
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
         const outputPath = path.join(dir, '_site');
+        const cpkPath = path.join(dir, '.cpk');
 
         // Broken link: next_success_url points to nonexistent page
         writeFixture(srcPath, 'sale/index.html',
             '---\ntitle: Product\npage_type: product\nnext_success_url: /sale/nonexistent/\n---\n<h1>Buy</h1>');
 
         const result = await build({
-            srcPath, outputPath,
+            srcPath, outputPath, cpkPath,
             campaigns: { 'sale': { name: 'Summer Sale' } },
         });
 
@@ -443,7 +454,7 @@ test('build: funnel.json contains validation errors for broken funnel', async ()
         assert.ok(result.funnelErrors > 0, 'should report funnel errors');
 
         // funnel.json should still be written with errors recorded
-        const funnelPath = path.join(outputPath, 'sale', 'funnel.json');
+        const funnelPath = path.join(cpkPath, 'sale', 'funnel.json');
         assert.ok(fs.existsSync(funnelPath), 'funnel.json should exist even with errors');
 
         const funnel = JSON.parse(fs.readFileSync(funnelPath, 'utf8'));
@@ -456,12 +467,13 @@ test('build: lenient mode downgrades funnel errors to warnings', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
         const outputPath = path.join(dir, '_site');
+        const cpkPath = path.join(dir, '.cpk');
 
         writeFixture(srcPath, 'sale/index.html',
             '---\ntitle: Product\npage_type: product\nnext_success_url: /sale/nonexistent/\n---\n<h1>Buy</h1>');
 
         const result = await build({
-            srcPath, outputPath,
+            srcPath, outputPath, cpkPath,
             campaigns: { 'sale': { name: 'Summer Sale' } },
             lenient: true,
         });
@@ -469,9 +481,93 @@ test('build: lenient mode downgrades funnel errors to warnings', async () => {
         // In lenient mode, funnel errors should be zero (downgraded to warnings)
         assert.equal(result.funnelErrors, 0);
 
-        const funnelPath = path.join(outputPath, 'sale', 'funnel.json');
+        const funnelPath = path.join(cpkPath, 'sale', 'funnel.json');
         const funnel = JSON.parse(fs.readFileSync(funnelPath, 'utf8'));
         // Errors moved to warnings in lenient mode
         assert.ok(funnel.validation.warnings.length > 0);
     });
+});
+
+// ---------------------------------------------------------------------------
+// validateFunnel — duplicate node IDs
+// ---------------------------------------------------------------------------
+
+test('validateFunnel: detects duplicate node IDs', () => {
+    const graph = {
+        campaign: 'sale',
+        entryPoint: '/sale/',
+        nodes: [
+            { id: 'index', path: '/sale/', type: 'product', title: 'Home', sourceFile: 'sale/index.html' },
+            { id: 'checkout', path: '/sale/checkout/', type: 'checkout', title: 'Pay', sourceFile: 'sale/checkout.html' },
+            { id: 'checkout', path: '/sale/checkout/', type: 'checkout', title: 'Pay Dupe', sourceFile: 'sale/checkout-v2.html' },
+        ],
+        edges: [],
+    };
+
+    const { errors } = validateFunnel(graph);
+    assert.ok(errors.some(e => e.includes('Duplicate page') && e.includes('checkout')));
+    assert.ok(errors.some(e => e.includes('sale/checkout.html') && e.includes('sale/checkout-v2.html')));
+});
+
+// ---------------------------------------------------------------------------
+// writeFunnelHtml — visual generation
+// ---------------------------------------------------------------------------
+
+test('writeFunnelHtml: generates valid HTML with graph data', async () => {
+    await withTmpDir(async (dir) => {
+        const json = {
+            campaign: 'sale',
+            generatedAt: '2026-04-16T00:00:00Z',
+            entryPoint: '/sale/',
+            nodes: [
+                { id: 'index', path: '/sale/', type: 'product', title: 'Home', sourceFile: 'sale/index.html' },
+                { id: 'checkout', path: '/sale/checkout/', type: 'checkout', title: 'Pay', sourceFile: 'sale/checkout.html' },
+            ],
+            edges: [
+                { source: 'index', target: 'checkout', kind: 'success' },
+            ],
+            validation: { errors: [], warnings: [] },
+        };
+
+        const outFile = writeFunnelHtml(json, dir, 'sale');
+        assert.equal(outFile, path.join(dir, 'sale', 'funnel.html'));
+
+        const html = fs.readFileSync(outFile, 'utf8');
+        assert.ok(html.includes('<!DOCTYPE html>'));
+        assert.ok(html.includes('"campaign":"sale"'));
+        assert.ok(html.includes('"id":"index"'));
+        assert.ok(html.includes('"id":"checkout"'));
+    });
+});
+
+test('writeFunnelHtml: escapes script tags in JSON data to prevent XSS', async () => {
+    await withTmpDir(async (dir) => {
+        const json = {
+            campaign: 'sale',
+            generatedAt: '2026-04-16T00:00:00Z',
+            entryPoint: '/sale/',
+            nodes: [
+                { id: 'index', path: '/sale/', type: 'product', title: '<script>alert("xss")</script>', sourceFile: 'sale/index.html' },
+            ],
+            edges: [],
+            validation: { errors: [], warnings: [] },
+        };
+
+        const outFile = writeFunnelHtml(json, dir, 'sale');
+        const html = fs.readFileSync(outFile, 'utf8');
+
+        // </script> inside JSON data must be escaped to prevent HTML parser from
+        // interpreting it as the closing tag of the inline script block
+        assert.ok(!html.includes('</script>alert'), 'raw </script> in data would break HTML parsing');
+        // The escaped form should be present: <\/script>
+        assert.ok(html.includes('<\\/script>'), 'should escape </script> to <\\/script>');
+    });
+});
+
+test('escapeHtml: escapes special characters', () => {
+    assert.equal(escapeHtml('<script>'), '&lt;script&gt;');
+    assert.equal(escapeHtml('"hello"'), '&quot;hello&quot;');
+    assert.equal(escapeHtml('A & B'), 'A &amp; B');
+    assert.equal(escapeHtml(''), '');
+    assert.equal(escapeHtml(null), '');
 });
