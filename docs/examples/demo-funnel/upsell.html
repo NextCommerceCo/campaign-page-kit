@@ -1,0 +1,15 @@
+---
+page_layout: base.html
+title: One-Time Offer
+page_type: upsell
+next_upsell_accept: /demo-funnel/receipt/
+next_upsell_decline: /demo-funnel/receipt/
+---
+
+<h1>Wait — one-time offer</h1>
+<p>Add the Pro Bundle for 50% off. This offer disappears when you leave this page.</p>
+
+<p>
+  <a class="cta" href="{{ 'receipt.html' | campaign_link }}">Yes, add it — $24</a>
+  <a class="secondary" href="{{ 'receipt.html' | campaign_link }}">No thanks</a>
+</p>
