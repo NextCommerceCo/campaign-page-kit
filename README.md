@@ -107,8 +107,8 @@ PORT=8080 npm run dev
 | Command | Description |
 |---|---|
 | `npm start` | Interactive menu: dev server, compress, clone, configure |
-| `npm run dev` | Start dev server with interactive campaign picker |
-| `npm run build` | Build all campaigns to `_site/` |
+| `npm run dev` | Start dev server (lenient funnel validation by default; add `-- --strict` to enforce) |
+| `npm run build` | Build all campaigns to `_site/` and generate funnel maps in `.cpk/` (add `-- --lenient` to downgrade funnel errors to warnings) |
 | `npm run clone` | Clone an existing campaign to a new slug |
 | `npm run config` | Set the API key for a campaign |
 | `npm run compress` | Compress all images in a campaign directory |
@@ -198,6 +198,23 @@ scripts:
 footer: true
 ---
 ```
+
+
+## Funnel Map
+
+Every build generates a funnel map for each campaign — a directed graph of your pages built from `page_type`, `next_success_url`, `next_upsell_accept`, and `next_upsell_decline`. The build validates the graph against six rules (broken links, orphan pages, missing terminals, asymmetric upsells, missing entry point, duplicate page IDs) and writes a self-contained HTML visualization you can open in a browser.
+
+![Valid 4-page funnel](docs/images/funnel-valid.png)
+
+**Quick start:**
+
+1. Add `page_type` and `next_*_url` routing fields to your page frontmatter (already documented in the frontmatter table above).
+2. Run `npm run build`.
+3. Open `.cpk/{campaign-slug}/funnel.html` in your browser.
+
+The `.cpk/` directory is developer-only and gitignored — it never ships to production. Funnel validation errors cause the build to exit non-zero by default; use `npm run build -- --lenient` to downgrade to warnings.
+
+**Full guide:** [`docs/funnel-map.md`](docs/funnel-map.md) — covers all six validation rules with example errors and fixes, a complete 4-page demo campaign you can copy into `src/`, and the programmatic API.
 
 
 ## Campaign Context (`campaign`)

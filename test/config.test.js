@@ -9,6 +9,9 @@ const {
     getCampaignsPath,
     getSrcPath,
     getOutputPath,
+    getCpkPath,
+    parseFlag,
+    formatBuildSummary,
     loadCampaigns,
     saveCampaigns,
     campaignsArray,
@@ -37,6 +40,59 @@ test('getOutputPath: returns _site/ under project root by default', () => {
 
 test('getOutputPath: returns resolved custom path when provided', () => {
     assert.equal(getOutputPath('/custom/out'), '/custom/out');
+});
+
+test('getCpkPath: returns .cpk/ under project root by default', () => {
+    assert.equal(getCpkPath(), path.join(process.cwd(), '.cpk'));
+});
+
+test('getCpkPath: returns resolved custom path when provided', () => {
+    assert.equal(getCpkPath('/custom/cpk'), '/custom/cpk');
+});
+
+// ---------------------------------------------------------------------------
+// parseFlag
+// ---------------------------------------------------------------------------
+
+test('parseFlag: returns true when flag is present', () => {
+    assert.equal(parseFlag(['node', 'build.js', '--lenient'], '--lenient'), true);
+});
+
+test('parseFlag: returns false when flag is absent', () => {
+    assert.equal(parseFlag(['node', 'build.js'], '--lenient'), false);
+});
+
+test('parseFlag: ignores node and script args (argv[0] and argv[1])', () => {
+    assert.equal(parseFlag(['--lenient', '--lenient'], '--lenient'), false);
+});
+
+test('parseFlag: works for --strict flag', () => {
+    assert.equal(parseFlag(['node', 'dev.js', '--strict'], '--strict'), true);
+    assert.equal(parseFlag(['node', 'dev.js'], '--strict'), false);
+});
+
+// ---------------------------------------------------------------------------
+// formatBuildSummary
+// ---------------------------------------------------------------------------
+
+test('formatBuildSummary: singular page, no errors', () => {
+    assert.equal(formatBuildSummary(1, 0, '42ms'), 'Built 1 page in 42ms');
+});
+
+test('formatBuildSummary: plural pages, no errors', () => {
+    assert.equal(formatBuildSummary(5, 0, '1.20s'), 'Built 5 pages in 1.20s');
+});
+
+test('formatBuildSummary: singular error', () => {
+    assert.equal(formatBuildSummary(3, 1, '100ms'), 'Built 3 pages in 100ms (1 error)');
+});
+
+test('formatBuildSummary: plural errors', () => {
+    assert.equal(formatBuildSummary(10, 4, '2.50s'), 'Built 10 pages in 2.50s (4 errors)');
+});
+
+test('formatBuildSummary: zero pages built', () => {
+    assert.equal(formatBuildSummary(0, 0, '5ms'), 'Built 0 pages in 5ms');
 });
 
 test('getCampaignsPath: returns _data/campaigns.json under project root by default', () => {
