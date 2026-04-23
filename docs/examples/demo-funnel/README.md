@@ -33,8 +33,11 @@ demo-funnel/
    ```bash
    npm run build
    ```
-4. Open `.cpk/demo-funnel/funnel.html` in your browser.
+4. Inspect the generated graph:
+   ```bash
+   cat .cpk/demo-funnel/funnel.json
+   ```
 
-You should see a graph with four nodes (product → checkout → upsell → receipt), color-coded by `page_type`, with edge labels for `success`, `accept`, and `decline`.
+You should see 4 nodes (product → checkout → upsell → receipt) and 3 edges (`success`, `accept`, `decline`), with `validation.errors` empty.
 
 See the full guide: [../../funnel-map.md](../../funnel-map.md)

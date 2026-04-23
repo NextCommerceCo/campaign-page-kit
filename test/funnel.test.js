@@ -5,7 +5,6 @@ const fs = require('fs');
 const path = require('path');
 
 const { generateFunnelMap, validateFunnel, writeFunnelJson, urlToNodeId } = require('../lib/engine/funnel');
-const { writeFunnelHtml, escapeHtml } = require('../lib/engine/funnel-visual');
 const { build } = require('../lib/engine/build');
 
 // ---------------------------------------------------------------------------
@@ -417,7 +416,7 @@ test('writeFunnelJson: writes JSON to correct path', async () => {
 // build() integration — funnel.json output
 // ---------------------------------------------------------------------------
 
-test('build: outputs funnel.json and funnel.html to cpkPath', async () => {
+test('build: outputs funnel.json to cpkPath', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
         const outputPath = path.join(dir, '_site');
@@ -449,12 +448,9 @@ test('build: outputs funnel.json and funnel.html to cpkPath', async () => {
         assert.equal(funnel.edges.length, 2);
         assert.equal(funnel.validation.errors.length, 0);
 
-        // funnel.html should also exist
+        // funnel.html should NOT be generated (JSON-only output)
         const htmlPath = path.join(cpkPath, 'sale', 'funnel.html');
-        assert.ok(fs.existsSync(htmlPath), 'funnel.html should exist');
-        const html = fs.readFileSync(htmlPath, 'utf8');
-        assert.ok(html.includes('<!DOCTYPE html>'));
-        assert.ok(html.includes('"campaign":"sale"'));
+        assert.ok(!fs.existsSync(htmlPath), 'funnel.html should not be generated');
     });
 });
 
@@ -532,65 +528,3 @@ test('validateFunnel: detects duplicate node IDs', () => {
     assert.ok(errors.some(e => e.includes('sale/checkout.html') && e.includes('sale/checkout-v2.html')));
 });
 
-// ---------------------------------------------------------------------------
-// writeFunnelHtml — visual generation
-// ---------------------------------------------------------------------------
-
-test('writeFunnelHtml: generates valid HTML with graph data', async () => {
-    await withTmpDir(async (dir) => {
-        const json = {
-            campaign: 'sale',
-            generatedAt: '2026-04-16T00:00:00Z',
-            entryPoint: '/sale/',
-            nodes: [
-                { id: 'index', path: '/sale/', type: 'product', title: 'Home', sourceFile: 'sale/index.html' },
-                { id: 'checkout', path: '/sale/checkout/', type: 'checkout', title: 'Pay', sourceFile: 'sale/checkout.html' },
-            ],
-            edges: [
-                { source: 'index', target: 'checkout', kind: 'success' },
-            ],
-            validation: { errors: [], warnings: [] },
-        };
-
-        const outFile = writeFunnelHtml(json, dir, 'sale');
-        assert.equal(outFile, path.join(dir, 'sale', 'funnel.html'));
-
-        const html = fs.readFileSync(outFile, 'utf8');
-        assert.ok(html.includes('<!DOCTYPE html>'));
-        assert.ok(html.includes('"campaign":"sale"'));
-        assert.ok(html.includes('"id":"index"'));
-        assert.ok(html.includes('"id":"checkout"'));
-    });
-});
-
-test('writeFunnelHtml: escapes script tags in JSON data to prevent XSS', async () => {
-    await withTmpDir(async (dir) => {
-        const json = {
-            campaign: 'sale',
-            generatedAt: '2026-04-16T00:00:00Z',
-            entryPoint: '/sale/',
-            nodes: [
-                { id: 'index', path: '/sale/', type: 'product', title: '<script>alert("xss")</script>', sourceFile: 'sale/index.html' },
-            ],
-            edges: [],
-            validation: { errors: [], warnings: [] },
-        };
-
-        const outFile = writeFunnelHtml(json, dir, 'sale');
-        const html = fs.readFileSync(outFile, 'utf8');
-
-        // </script> inside JSON data must be escaped to prevent HTML parser from
-        // interpreting it as the closing tag of the inline script block
-        assert.ok(!html.includes('</script>alert'), 'raw </script> in data would break HTML parsing');
-        // The escaped form should be present: <\/script>
-        assert.ok(html.includes('<\\/script>'), 'should escape </script> to <\\/script>');
-    });
-});
-
-test('escapeHtml: escapes special characters', () => {
-    assert.equal(escapeHtml('<script>'), '&lt;script&gt;');
-    assert.equal(escapeHtml('"hello"'), '&quot;hello&quot;');
-    assert.equal(escapeHtml('A & B'), 'A &amp; B');
-    assert.equal(escapeHtml(''), '');
-    assert.equal(escapeHtml(null), '');
-});

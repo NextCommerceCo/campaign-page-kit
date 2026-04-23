@@ -202,19 +202,19 @@ footer: true
 
 ## Funnel Map
 
-Every build generates a funnel map for each campaign — a directed graph of your pages built from `page_type`, `next_success_url`, `next_upsell_accept`, and `next_upsell_decline`. The build validates the graph against six rules (broken links, orphan pages, missing terminals, asymmetric upsells, missing entry point, duplicate page IDs) and writes a self-contained HTML visualization you can open in a browser.
+Every build generates a `funnel.json` for each campaign — a directed graph of your pages built from `page_type`, `next_success_url`, `next_upsell_accept`, and `next_upsell_decline`. The build validates the graph against six rules (broken links, orphan pages, missing terminals, asymmetric upsells, missing entry point, duplicate page IDs) and exits non-zero if any rule fails.
 
-![Valid 4-page funnel](docs/images/funnel-valid.png)
+Use the JSON to power your own dashboards, CI checks, or routing documentation. The schema is stable and works directly with graph libraries like D3, Cytoscape, or Mermaid.
 
 **Quick start:**
 
 1. Add `page_type` and `next_*_url` routing fields to your page frontmatter (already documented in the frontmatter table above).
 2. Run `npm run build`.
-3. Open `.cpk/{campaign-slug}/funnel.html` in your browser.
+3. Inspect `.cpk/{campaign-slug}/funnel.json`.
 
-The `.cpk/` directory is developer-only and gitignored — it never ships to production. Funnel validation errors cause the build to exit non-zero by default; use `npm run build -- --lenient` to downgrade to warnings.
+The `.cpk/` directory is developer-only and gitignored — it never ships to production. Use `npm run build -- --lenient` to downgrade validation errors to warnings.
 
-**Full guide:** [`docs/funnel-map.md`](docs/funnel-map.md) — covers all six validation rules with example errors and fixes, a complete 4-page demo campaign you can copy into `src/`, and the programmatic API.
+**Full guide:** [`docs/funnel-map.md`](docs/funnel-map.md) — covers the JSON schema, all six validation rules with example errors and fixes, a complete 4-page demo campaign you can copy into `src/`, and the programmatic API.
 
 
 ## Campaign Context (`campaign`)
