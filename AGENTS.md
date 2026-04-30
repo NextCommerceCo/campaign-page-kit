@@ -4,7 +4,7 @@ This file provides instructions for AI coding agents working on projects using t
 
 ## Project Overview
 
-This is a campaign project built with **next-campaign-page-kit** — an Eleventy-based static site generator framework for e-commerce campaign funnels with multiple pages (presale, offer, checkout, upsell, receipt) using the Next Commerce Campaign Cart SDK.
+This is a campaign project built with **next-campaign-page-kit** — an Eleventy-based static site generator framework for e-commerce campaign funnels with multiple pages (presell, offer, checkout, upsell, receipt) using the Next Commerce Campaign Cart SDK.
 
 **Key Technologies:**
 - next-campaign-page-kit (Eleventy plugin + CLI)
@@ -23,7 +23,7 @@ your-project/
 │       ├── _layouts/          # Campaign layouts
 │       ├── _includes/         # Reusable components
 │       ├── assets/            # Assets (css, images, js, config.js)
-│       ├── presale.html       # Presale page
+│       ├── presell.html       # Presell page
 │       ├── checkout.html      # Checkout page
 │       ├── upsell.html        # Upsell page
 │       ├── receipt.html       # Receipt page
@@ -181,7 +181,7 @@ Base layout must include:
 ### Manual Testing
 1. Run `npm run dev`
 2. Select campaign to test
-3. Navigate through funnel: Presale → Offer → Checkout → Upsell → Receipt
+3. Navigate through funnel: Presell → Offer → Checkout → Upsell → Receipt
 4. Verify all assets load (check browser Network tab)
 5. Test links work correctly
 6. Verify SDK loads without errors

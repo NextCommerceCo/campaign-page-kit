@@ -1,7 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parsePort } = require('../lib/actions/dev');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const { parsePort, normalizeEntryUrl, buildDevUrl, validateEntryUrl } = require('../lib/actions/dev');
 
 // ---------------------------------------------------------------------------
 // Helpers — stub logger.error and process.exit for validation tests
@@ -188,4 +192,136 @@ test('parsePort: accepts port 1 (minimum valid)', () => {
 
 test('parsePort: accepts port 65535 (maximum valid)', () => {
     assert.equal(parsePort(['node', 'dev.js', '-p', '65535']), 65535);
+});
+
+// ---------------------------------------------------------------------------
+// normalizeEntryUrl — campaign entry_url normalization
+// ---------------------------------------------------------------------------
+
+test('normalizeEntryUrl: returns empty string for undefined', () => {
+    assert.equal(normalizeEntryUrl(undefined), '');
+});
+
+test('normalizeEntryUrl: returns empty string for null', () => {
+    assert.equal(normalizeEntryUrl(null), '');
+});
+
+test('normalizeEntryUrl: returns empty string for empty string', () => {
+    assert.equal(normalizeEntryUrl(''), '');
+});
+
+test('normalizeEntryUrl: returns empty string for whitespace', () => {
+    assert.equal(normalizeEntryUrl('   '), '');
+});
+
+test('normalizeEntryUrl: returns empty string for non-string input', () => {
+    assert.equal(normalizeEntryUrl(42), '');
+    assert.equal(normalizeEntryUrl({}), '');
+});
+
+test('normalizeEntryUrl: appends trailing slash to bare page name', () => {
+    assert.equal(normalizeEntryUrl('presell'), 'presell/');
+});
+
+test('normalizeEntryUrl: strips .html extension', () => {
+    assert.equal(normalizeEntryUrl('presell.html'), 'presell/');
+});
+
+test('normalizeEntryUrl: strips .HTML extension case-insensitively', () => {
+    assert.equal(normalizeEntryUrl('Presell.HTML'), 'Presell/');
+});
+
+test('normalizeEntryUrl: strips leading slash', () => {
+    assert.equal(normalizeEntryUrl('/presell'), 'presell/');
+});
+
+test('normalizeEntryUrl: strips trailing slash', () => {
+    assert.equal(normalizeEntryUrl('presell/'), 'presell/');
+});
+
+test('normalizeEntryUrl: strips both leading and trailing slashes', () => {
+    assert.equal(normalizeEntryUrl('/presell/'), 'presell/');
+});
+
+test('normalizeEntryUrl: preserves nested path segments', () => {
+    assert.equal(normalizeEntryUrl('checkout/step-1'), 'checkout/step-1/');
+});
+
+// ---------------------------------------------------------------------------
+// buildDevUrl — combines port, slug, and entry_url
+// ---------------------------------------------------------------------------
+
+test('buildDevUrl: returns campaign root when entry_url is missing', () => {
+    assert.equal(buildDevUrl(3000, 'my-campaign'), 'http://localhost:3000/my-campaign/');
+});
+
+test('buildDevUrl: appends entry_url page', () => {
+    assert.equal(buildDevUrl(3000, 'my-campaign', 'presell'), 'http://localhost:3000/my-campaign/presell/');
+});
+
+test('buildDevUrl: appends entry_url with .html extension stripped', () => {
+    assert.equal(buildDevUrl(8080, 'drift-v1', 'landing.html'), 'http://localhost:8080/drift-v1/landing/');
+});
+
+// ---------------------------------------------------------------------------
+// validateEntryUrl — checks entry_url resolves to a real source page
+// ---------------------------------------------------------------------------
+
+function makeFixtureSrc(pages) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-dev-test-'));
+    const srcPath = path.join(root, 'src');
+    for (const rel of pages) {
+        const full = path.join(srcPath, rel);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, '<!doctype html>');
+    }
+    return { srcPath, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+}
+
+test('validateEntryUrl: returns null when entry_url is undefined', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', undefined), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns null when entry_url is empty', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', ''), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns null when target page exists', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'presell'), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns null when target page exists with .html', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/landing.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'landing.html'), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns null for nested page that exists', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/checkout/step-1.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'checkout/step-1'), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns error when target page is missing', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try {
+        const err = validateEntryUrl(srcPath, 'my-campaign', 'landing');
+        assert.match(err, /entry_url "landing"/);
+        assert.match(err, /my-campaign/);
+        assert.match(err, /landing\.html/);
+    } finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns error when slug directory does not exist', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['other/presell.html']);
+    try {
+        const err = validateEntryUrl(srcPath, 'my-campaign', 'presell');
+        assert.match(err, /entry_url "presell"/);
+    } finally { cleanup(); }
 });

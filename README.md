@@ -48,34 +48,6 @@ npx campaign-init
 > [!IMPORTANT]
 > Get your Campaign API key from the Campaigns App in your store. See [Campaigns App Guide](https://developers.nextcommerce.com/docs/campaigns/#getting-started). You can skip this step during init and run `npm run config` later.
 
-#### Building a campaign from scratch (no template)
-
-If you'd rather start empty, run `campaign-init` and cancel the template picker (Ctrl+C). The bootstrap step still runs — you'll have CLI scripts and an empty `_data/campaigns.json`. Then add an entry keyed by slug:
-
-```json
-{
-  "my-campaign": {
-    "name": "My Campaign",
-    "description": "My first campaign",
-    "sdk_version": "0.3.10"
-  }
-}
-```
-
-…and create the matching directory tree under `src/`:
-
-```
-src/
-└── my-campaign/
-    ├── _layouts/
-    │   └── base.html
-    ├── assets/
-    │   └── config.js
-    └── presale.html
-```
-
-Then run `npm run config` to set the API key.
-
 ### 4. Start the development server
 
 ```bash
@@ -150,7 +122,7 @@ your-project/
 │       │   ├── images/         # Campaign images
 │       │   ├── js/             # Campaign scripts
 │       │   └── config.js       # SDK configuration
-│       ├── presale.html        # Presale page (Base URL)
+│       ├── presell.html        # Presell page (Base URL)
 │       ├── checkout.html       # Checkout page
 │       ├── upsell.html         # Upsell page
 │       ├── receipt.html        # Receipt page
@@ -176,9 +148,8 @@ Each campaign page uses YAML frontmatter to configure the page for context.
 | `title` | string | Yes | Page title for `<title>` tag |
 | `page_type` | string | Yes | Page type: `product`, `checkout`, `upsell`, `receipt` |
 | `permalink` | string | No | Custom URL path (e.g., `/starter/`) |
-| `next_success_url` | string | No | Redirect URL after successful checkout |
-| `next_upsell_accept` | string | No | URL when upsell accepted |
-| `next_upsell_decline` | string | No | URL when upsell declined |
+| `next_url` | string | No | Next page in the funnel — the universal forward pointer. Set on every page (presell, landing, checkout, upsell). Layouts map it to the SDK's `next-success-url` meta tag on checkout pages and to `next-upsell-accept-url` on upsell pages. |
+| `decline_url` | string | No | Override for upsell decline. Only set when the decline path differs from `next_url`. Defaults to `next_url`. Maps to the SDK's `next-upsell-decline-url` meta tag. |
 | `styles` | array | No | Page-specific CSS files (relative paths or external URLs) |
 | `scripts` | array | No | Page-specific JS files (relative paths or external URLs) |
 | `footer` | boolean | No | Show footer on this page |
@@ -191,7 +162,7 @@ Each campaign page uses YAML frontmatter to configure the page for context.
 page_layout: base.html
 title: Checkout
 page_type: checkout
-next_success_url: upsell.html
+next_url: upsell.html
 styles:
   - https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css
   - css/offer.css
@@ -224,6 +195,7 @@ To add more context across all pages in your campaign, simply add new keys to yo
 {
   "starter": {
     "name": "Starter Campaign",
+    "entry_url": "presell.html",
     "support_email": "support@example.com",
     "custom_headline": "Welcome to our Store!"
   }
@@ -235,6 +207,14 @@ Then the context is available to use it in your templates:
 ```liquid
 <h2>{{ campaign.custom_headline }}</h2>
 ```
+
+### Reserved Fields
+
+These keys are read by the CLI and have built-in behavior:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entry_url` | string | Page that `npm run dev` opens in the browser. Defaults to the campaign root (`/<slug>/`). Accepts a page name like `presell` or `landing.html` — the path is normalized to `/<slug>/<page>/`. Useful when the campaign has no root page and the funnel starts at a specific entry like a presell or landing page. A warning is shown if the page does not exist under `src/<slug>/`. |
 
 ### Environment Variable
 
@@ -322,7 +302,7 @@ Generates clean URLs for inter-page navigation.
 <!-- Output: /starter/checkout/ -->
 
 <!-- Campaign Cart meta tag -->
-<meta name="next-success-url" content="{{ next_success_url | campaign_link }}">
+<meta name="next-success-url" content="{{ next_url | campaign_link }}">
 <!-- Output: /starter/upsell/ -->
 
 <!-- Data attribute -->
@@ -370,6 +350,34 @@ To connect this campaign to your 29 Next Campaigns App:
 4. Deploy your campaign
 
 For more details, see the [Campaigns App documentation](https://developers.nextcommerce.com/docs/campaigns/#getting-started).
+
+## Building a campaign from scratch (no template)
+
+Most users should start with `campaign-init` and pick a starter template. If you'd rather start empty, run `campaign-init` and cancel the template picker (Ctrl+C). The bootstrap step still runs — you'll have CLI scripts and an empty `_data/campaigns.json`. Then add an entry keyed by slug:
+
+```json
+{
+  "my-campaign": {
+    "name": "My Campaign",
+    "description": "My first campaign",
+    "sdk_version": "0.3.10"
+  }
+}
+```
+
+…and create the matching directory tree under `src/`:
+
+```
+src/
+└── my-campaign/
+    ├── _layouts/
+    │   └── base.html
+    ├── assets/
+    │   └── config.js
+    └── presell.html
+```
+
+Then run `npm run config` to set the API key.
 
 ## Test Orders
 

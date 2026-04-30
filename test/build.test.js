@@ -37,9 +37,9 @@ test('resolveOutput: index.html → campaign root', () => {
 });
 
 test('resolveOutput: named page → pretty URL', () => {
-    const { url, outputFile } = resolveOutput('my-campaign/presale.html', {}, '/out');
-    assert.equal(url, '/my-campaign/presale/');
-    assert.equal(outputFile, path.join('/out', 'my-campaign', 'presale', 'index.html'));
+    const { url, outputFile } = resolveOutput('my-campaign/presell.html', {}, '/out');
+    assert.equal(url, '/my-campaign/presell/');
+    assert.equal(outputFile, path.join('/out', 'my-campaign', 'presell', 'index.html'));
 });
 
 test('resolveOutput: permalink frontmatter overrides path', () => {
