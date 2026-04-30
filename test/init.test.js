@@ -14,6 +14,7 @@ const {
     applyApiKey,
     extractTemplate,
     countFiles,
+    replaceDirectoryWithRollback,
 } = require('../lib/actions/init');
 
 // ---------------------------------------------------------------------------
@@ -228,6 +229,77 @@ test('extractTemplate: cleans up its temp dir on success', () => {
 
     const stragglers = fs.readdirSync(path.join(root, 'src')).filter(n => n.startsWith('.cpk-extract-'));
     assert.deepEqual(stragglers, []);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// replaceDirectoryWithRollback
+// ---------------------------------------------------------------------------
+
+test('replaceDirectoryWithRollback: replaces the destination and runs commit', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-replace-test-'));
+    const dest = path.join(root, 'src', 'olympus');
+    const staged = path.join(root, 'src', '.cpk-install-abc', 'olympus');
+    const marker = path.join(root, 'committed');
+
+    fs.mkdirSync(dest, { recursive: true });
+    fs.writeFileSync(path.join(dest, 'old.html'), 'old');
+    fs.mkdirSync(staged, { recursive: true });
+    fs.writeFileSync(path.join(staged, 'new.html'), 'new');
+
+    replaceDirectoryWithRollback(staged, dest, () => {
+        fs.writeFileSync(marker, 'yes');
+    });
+
+    assert.equal(fs.existsSync(path.join(dest, 'old.html')), false);
+    assert.equal(fs.readFileSync(path.join(dest, 'new.html'), 'utf8'), 'new');
+    assert.equal(fs.readFileSync(marker, 'utf8'), 'yes');
+    assert.deepEqual(fs.readdirSync(path.dirname(dest)).filter(n => n.startsWith('.cpk-backup-')), []);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('replaceDirectoryWithRollback: restores an existing destination when commit fails', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-replace-test-'));
+    const dest = path.join(root, 'src', 'olympus');
+    const staged = path.join(root, 'src', '.cpk-install-abc', 'olympus');
+
+    fs.mkdirSync(dest, { recursive: true });
+    fs.writeFileSync(path.join(dest, 'old.html'), 'old');
+    fs.mkdirSync(staged, { recursive: true });
+    fs.writeFileSync(path.join(staged, 'new.html'), 'new');
+
+    assert.throws(
+        () => replaceDirectoryWithRollback(staged, dest, () => {
+            throw new Error('registry write failed');
+        }),
+        /registry write failed/
+    );
+
+    assert.equal(fs.readFileSync(path.join(dest, 'old.html'), 'utf8'), 'old');
+    assert.equal(fs.existsSync(path.join(dest, 'new.html')), false);
+    assert.deepEqual(fs.readdirSync(path.dirname(dest)).filter(n => n.startsWith('.cpk-backup-')), []);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('replaceDirectoryWithRollback: removes a new destination when commit fails', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-replace-test-'));
+    const dest = path.join(root, 'src', 'olympus');
+    const staged = path.join(root, 'src', '.cpk-install-abc', 'olympus');
+
+    fs.mkdirSync(staged, { recursive: true });
+    fs.writeFileSync(path.join(staged, 'new.html'), 'new');
+
+    assert.throws(
+        () => replaceDirectoryWithRollback(staged, dest, () => {
+            throw new Error('registry write failed');
+        }),
+        /registry write failed/
+    );
+
+    assert.equal(fs.existsSync(dest), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
