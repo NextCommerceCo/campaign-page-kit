@@ -12,7 +12,7 @@ Most static site generators are designed around a single site. When you need to 
 
 Next Campaign Page Kit solves this by treating each campaign as a fully isolated unit within a single repository. Every campaign lives in its own subdirectory with its own layouts, assets, and configuration — but they're all built, versioned, and deployed together.
 
-The CLI tools (`dev`, `clone`, `config`, `compress`) and template filters (`campaign_asset`, `campaign_link`, `campaign_include`) enforce this isolation at every step, so developers can work on one campaign without fear of affecting another.
+The CLI tools (`setup`, `dev`, `clone`, `config`, `compress`) and template filters (`campaign_asset`, `campaign_link`, `campaign_include`) enforce this isolation at every step, so developers can work on one campaign without fear of affecting another.
 
 ## Getting Started
 
@@ -35,13 +35,22 @@ npm install next-campaign-page-kit
 npx campaign-init
 ```
 
-This will:
-- Add all CLI scripts to your `package.json`
-- Create `_data/campaigns.json` — empty campaign registry to get you started
+`campaign-init` walks you through everything in one flow:
 
-### 4. Add your first campaign to `_data/campaigns.json`
+1. Adds CLI scripts (`dev`, `build`, `clone`, `config`, `compress`, `migrate`, …) to your `package.json`
+2. Creates an empty `_data/campaigns.json` registry
+3. Fetches the list of available starter templates from [campaign-cart-starter-templates](https://github.com/NextCommerceCo/campaign-cart-starter-templates) and shows a picker
+4. Asks for your **Campaign name** (display name) and **Campaign slug** (directory + URL path, e.g. `/my-campaign/`)
+5. Downloads only the chosen template's `src/<slug>/` files into your project
+6. Merges the template's registry data into your local `_data/campaigns.json` under your chosen slug
+7. Optionally prompts for your Campaign API key and writes it to `assets/config.js`
 
-Each entry is keyed by the campaign slug, which must match the campaign's directory name under `src/`.
+> [!IMPORTANT]
+> Get your Campaign API key from the Campaigns App in your store. See [Campaigns App Guide](https://developers.nextcommerce.com/docs/campaigns/#getting-started). You can skip this step during init and run `npm run config` later.
+
+#### Building a campaign from scratch (no template)
+
+If you'd rather start empty, run `campaign-init` and cancel the template picker (Ctrl+C). The bootstrap step still runs — you'll have CLI scripts and an empty `_data/campaigns.json`. Then add an entry keyed by slug:
 
 ```json
 {
@@ -53,7 +62,7 @@ Each entry is keyed by the campaign slug, which must match the campaign's direct
 }
 ```
 
-### 5. Create your campaign files
+…and create the matching directory tree under `src/`:
 
 ```
 src/
@@ -65,16 +74,9 @@ src/
     └── presale.html
 ```
 
-### 6. Set your Campaign API key
+Then run `npm run config` to set the API key.
 
-```bash
-npm run config
-```
-
-> [!IMPORTANT]
-> Get your Campaign API key from the Campaigns App in your store. See [Campaigns App Guide](https://developers.nextcommerce.com/docs/campaigns/#getting-started).
-
-### 7. Start the development server
+### 4. Start the development server
 
 ```bash
 npm run dev
@@ -107,10 +109,11 @@ PORT=8080 npm run dev
 | Command | Description |
 |---|---|
 | `npm start` | Interactive menu: dev server, compress, clone, configure |
+| `npm run setup` | Bootstrap a project, install a starter template, and set the API key (alias for `campaign-init`) |
 | `npm run dev` | Start dev server with interactive campaign picker |
 | `npm run build` | Build all campaigns to `_site/` |
-| `npm run clone` | Clone an existing campaign to a new slug |
-| `npm run config` | Set the API key for a campaign |
+| `npm run clone` | Clone an existing local campaign to a new slug |
+| `npm run config` | Set the API key for an existing local campaign |
 | `npm run compress` | Compress all images in a campaign directory |
 | `npm run compress:preview` | Preview compression savings without modifying files |
 | `npm run migrate` | Migrate `campaigns.json` from old array format to key-based format |
