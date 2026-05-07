@@ -232,6 +232,23 @@ Base layout must include:
 3. Enter new campaign name and slug
 4. Configure API key: `npm run config`
 
+### Scaffolding a New Campaign (non-interactive)
+
+`campaign-init` accepts flags so an agent can scaffold a campaign without prompts. Use `--json` to get a parseable result:
+
+```bash
+npx campaign-init --json \
+    --template olympus \
+    --slug my-new-campaign \
+    --name "My New Campaign" \
+    --api-key "$KEY" \
+    --ai-context claude
+```
+
+Required (in `--non-interactive` mode): `--template`. `--slug` and `--name` default sensibly if omitted. Use `--overwrite` on conflict, `--keep-ai-context` to preserve an existing `CLAUDE.md` / `AGENTS.md` / `.cursor/rules/...` / `.github/copilot-instructions.md`. `--dry-run` resolves the plan without writing.
+
+**Exit codes:** `0` ok · `2` template not found · `3` conflict · `4` upstream fetch failed · `5` missing input · `6` invalid input · `7`/`8` rollback states. The full JSON payload includes `status`, `campaign`, `writes`, `warnings`, `errors`. See `campaign-init --help` for the complete flag list.
+
 ### Compressing Images
 Run before deploying to reduce image file sizes in-place:
 1. Run `npm run compress:preview` to see savings without modifying files

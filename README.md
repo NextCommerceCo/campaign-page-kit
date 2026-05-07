@@ -48,6 +48,45 @@ npx campaign-init
 > [!IMPORTANT]
 > Get your Campaign API key from the Campaigns App in your store. See [Campaigns App Guide](https://developers.nextcommerce.com/docs/campaigns/#getting-started). You can skip this step during init and run `npm run config` later.
 
+#### Non-interactive (agents, CI, scripts)
+
+`campaign-init` can run with no prompts at all. Pass every value as a flag and add `--non-interactive`:
+
+```bash
+npx campaign-init --non-interactive \
+    --template olympus \
+    --slug grounding-mat-v2 \
+    --name "Grounding Mat V2" \
+    --api-key "$CAMPAIGN_API_KEY"
+```
+
+For agent-friendly automation, add `--json` to receive a single structured object on stdout (suppresses all human UI and prompts):
+
+```bash
+npx campaign-init --json \
+    --template olympus --slug grounding-mat-v2 --name "Grounding Mat V2" \
+    --api-key "$CAMPAIGN_API_KEY" \
+    --ai-context claude
+```
+
+| Flag | Purpose |
+|---|---|
+| `--template <slug>` | Starter template slug (must exist in upstream `templates.json`) |
+| `--slug <name>` | Local campaign slug (folder under `src/`, also URL path) |
+| `--name <"display">` | Display name (defaults to upstream template name) |
+| `--api-key <key>` | Campaign Cart API key, written to `assets/config.js` |
+| `--non-interactive` | Never prompt; missing required input → exit 5 |
+| `--json` | Machine-readable stdout; suppresses all human UI |
+| `--dry-run` | Resolve plan; no downloads, no writes |
+| `--overwrite` | Replace existing `src/<slug>/` and registry entry |
+| `--ai-context <tool>` | Write upstream AI context doc for `claude`, `codex`, `cursor`, `copilot`, or `none` (default) |
+| `--keep-ai-context` | Preserve an existing AI context file |
+| `--help`, `-h` | Show full help |
+
+**Exit codes:** `0` ok · `2` template not found · `3` target conflict (use `--overwrite`) · `4` upstream fetch failed · `5` missing required input · `6` invalid input · `7` partial write rolled back · `8` rollback failed.
+
+`--ai-context` writes the upstream context doc verbatim (with a sentinel header) to wherever the chosen tool auto-loads it: `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/campaign-page-kit.mdc`, or `.github/copilot-instructions.md`.
+
 ### 4. Start the development server
 
 ```bash
