@@ -7,6 +7,9 @@ const { execSync } = require('child_process');
 
 const {
     SCRIPTS,
+    AI_CONTEXT_TARGETS,
+    AI_CONTEXT_SENTINEL,
+    FLAG_SCHEMA,
     slugify,
     selectableTemplates,
     mergeCampaignEntry,
@@ -15,6 +18,11 @@ const {
     extractTemplate,
     countFiles,
     replaceDirectoryWithRollback,
+    parseArgs,
+    kebabToCamel,
+    validateSlug,
+    aiContextTarget,
+    buildAiContextContent,
 } = require('../lib/actions/init');
 
 // ---------------------------------------------------------------------------
@@ -302,6 +310,155 @@ test('replaceDirectoryWithRollback: removes a new destination when commit fails'
     assert.equal(fs.existsSync(dest), false);
 
     fs.rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// kebabToCamel
+// ---------------------------------------------------------------------------
+
+test('kebabToCamel: leaves a single word unchanged', () => {
+    assert.equal(kebabToCamel('slug'), 'slug');
+});
+
+test('kebabToCamel: camelCases multi-word keys', () => {
+    assert.equal(kebabToCamel('ai-context'), 'aiContext');
+    assert.equal(kebabToCamel('non-interactive'), 'nonInteractive');
+    assert.equal(kebabToCamel('keep-ai-context'), 'keepAiContext');
+});
+
+test('kebabToCamel: leaves digits and trailing hyphens alone', () => {
+    assert.equal(kebabToCamel('a-1-b'), 'a1B');
+});
+
+// ---------------------------------------------------------------------------
+// validateSlug
+// ---------------------------------------------------------------------------
+
+test('validateSlug: accepts kebab-case slugs', () => {
+    assert.equal(validateSlug('grounding-mat-v2'), null);
+    assert.equal(validateSlug('a'), null);
+    assert.equal(validateSlug('123-x'), null);
+});
+
+test('validateSlug: rejects empty/whitespace', () => {
+    assert.match(validateSlug(''),    /empty/);
+    assert.match(validateSlug('   '), /empty/);
+    assert.match(validateSlug(null),  /empty/);
+});
+
+test('validateSlug: rejects uppercase, underscores, leading hyphens', () => {
+    assert.match(validateSlug('My-Slug'),  /lowercase/);
+    assert.match(validateSlug('my_slug'),  /lowercase/);
+    assert.match(validateSlug('-leading'), /lowercase/);
+});
+
+// ---------------------------------------------------------------------------
+// parseArgs
+// ---------------------------------------------------------------------------
+
+test('parseArgs: handles --key value and --key=value forms', () => {
+    const a = parseArgs(['--template', 'olympus'], FLAG_SCHEMA);
+    assert.deepEqual(a.errors, []);
+    assert.equal(a.values.template, 'olympus');
+
+    const b = parseArgs(['--template=olympus'], FLAG_SCHEMA);
+    assert.deepEqual(b.errors, []);
+    assert.equal(b.values.template, 'olympus');
+});
+
+test('parseArgs: boolean flags default to true and accept =false', () => {
+    const a = parseArgs(['--non-interactive'], FLAG_SCHEMA);
+    assert.equal(a.values.nonInteractive, true);
+
+    const b = parseArgs(['--non-interactive=false'], FLAG_SCHEMA);
+    assert.equal(b.values.nonInteractive, false);
+});
+
+test('parseArgs: -h is an alias for --help', () => {
+    const a = parseArgs(['-h'], FLAG_SCHEMA);
+    assert.equal(a.values.help, true);
+});
+
+test('parseArgs: kebab keys map to camelCase result keys', () => {
+    const a = parseArgs(['--api-key', 'k', '--ai-context', 'claude', '--keep-ai-context'], FLAG_SCHEMA);
+    assert.deepEqual(a.errors, []);
+    assert.equal(a.values.apiKey, 'k');
+    assert.equal(a.values.aiContext, 'claude');
+    assert.equal(a.values.keepAiContext, true);
+});
+
+test('parseArgs: rejects unknown flags', () => {
+    const a = parseArgs(['--bogus'], FLAG_SCHEMA);
+    assert.equal(a.errors.length, 1);
+    assert.equal(a.errors[0].code, 'INVALID_INPUT');
+    assert.match(a.errors[0].message, /unknown flag: --bogus/);
+});
+
+test('parseArgs: enum-typed flags reject invalid values', () => {
+    const a = parseArgs(['--ai-context', 'vim'], FLAG_SCHEMA);
+    assert.equal(a.errors.length, 1);
+    assert.match(a.errors[0].message, /must be one of/);
+});
+
+test('parseArgs: string flags require a value', () => {
+    const a = parseArgs(['--template'], FLAG_SCHEMA);
+    assert.equal(a.errors.length, 1);
+    assert.match(a.errors[0].message, /requires a value/);
+});
+
+test('parseArgs: a string flag followed by another flag reports missing value', () => {
+    const a = parseArgs(['--template', '--slug', 'x'], FLAG_SCHEMA);
+    assert.ok(a.errors.some(e => /--template requires a value/.test(e.message)));
+    assert.equal(a.values.slug, 'x');
+});
+
+test('parseArgs: rejects positional args', () => {
+    const a = parseArgs(['olympus'], FLAG_SCHEMA);
+    assert.equal(a.errors.length, 1);
+    assert.match(a.errors[0].message, /unexpected positional/);
+});
+
+// ---------------------------------------------------------------------------
+// aiContextTarget
+// ---------------------------------------------------------------------------
+
+test('aiContextTarget: returns destination spec for known tools', () => {
+    assert.equal(aiContextTarget('claude').path, 'CLAUDE.md');
+    assert.equal(aiContextTarget('codex').path, 'AGENTS.md');
+    assert.equal(aiContextTarget('cursor').path, '.cursor/rules/campaign-page-kit.mdc');
+    assert.equal(aiContextTarget('copilot').path, '.github/copilot-instructions.md');
+});
+
+test('aiContextTarget: returns null for "none" and unknown tools', () => {
+    assert.equal(aiContextTarget('none'), null);
+    assert.equal(aiContextTarget('vim'), null);
+    assert.equal(aiContextTarget(''), null);
+});
+
+test('aiContextTarget: only cursor has frontmatter', () => {
+    assert.equal(aiContextTarget('claude').frontmatter, null);
+    assert.equal(aiContextTarget('codex').frontmatter, null);
+    assert.equal(aiContextTarget('copilot').frontmatter, null);
+    assert.match(aiContextTarget('cursor').frontmatter, /alwaysApply: true/);
+});
+
+// ---------------------------------------------------------------------------
+// buildAiContextContent
+// ---------------------------------------------------------------------------
+
+test('buildAiContextContent: prepends sentinel, then upstream body', () => {
+    const out = buildAiContextContent('# upstream body\n', AI_CONTEXT_TARGETS.claude);
+    assert.ok(out.startsWith(AI_CONTEXT_SENTINEL), 'sentinel at top');
+    assert.ok(out.includes('# upstream body'), 'body preserved');
+    assert.ok(out.indexOf(AI_CONTEXT_SENTINEL) < out.indexOf('# upstream body'), 'sentinel before body');
+});
+
+test('buildAiContextContent: prepends frontmatter above sentinel for cursor', () => {
+    const out = buildAiContextContent('# body\n', AI_CONTEXT_TARGETS.cursor);
+    assert.ok(out.startsWith('---'), 'frontmatter at top');
+    assert.match(out, /alwaysApply: true/);
+    assert.ok(out.indexOf('---') < out.indexOf(AI_CONTEXT_SENTINEL), 'frontmatter before sentinel');
+    assert.ok(out.indexOf(AI_CONTEXT_SENTINEL) < out.indexOf('# body'), 'sentinel before body');
 });
 
 // ---------------------------------------------------------------------------
