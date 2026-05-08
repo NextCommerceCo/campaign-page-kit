@@ -252,15 +252,21 @@ test('normalizeEntryUrl: preserves nested path segments', () => {
 // ---------------------------------------------------------------------------
 
 test('buildDevUrl: returns campaign root when entry_url is missing', () => {
-    assert.equal(buildDevUrl(3000, 'my-campaign'), 'http://localhost:3000/my-campaign/');
+    assert.equal(buildDevUrl(3000, 'my-campaign'), 'http://localhost:3000/my-campaign/?debugger=true');
 });
 
 test('buildDevUrl: appends entry_url page', () => {
-    assert.equal(buildDevUrl(3000, 'my-campaign', 'presell'), 'http://localhost:3000/my-campaign/presell/');
+    assert.equal(buildDevUrl(3000, 'my-campaign', 'presell'), 'http://localhost:3000/my-campaign/presell/?debugger=true');
 });
 
 test('buildDevUrl: appends entry_url with .html extension stripped', () => {
-    assert.equal(buildDevUrl(8080, 'drift-v1', 'landing.html'), 'http://localhost:8080/drift-v1/landing/');
+    assert.equal(buildDevUrl(8080, 'drift-v1', 'landing.html'), 'http://localhost:8080/drift-v1/landing/?debugger=true');
+});
+
+test('buildDevUrl: always appends ?debugger=true so the campaign cart SDK debug toolbar shows locally', () => {
+    assert.match(buildDevUrl(3000, 'my-campaign'), /\?debugger=true$/);
+    assert.match(buildDevUrl(3000, 'my-campaign', 'presell'), /\?debugger=true$/);
+    assert.match(buildDevUrl(3000, 'my-campaign', 'checkout/step-1'), /\?debugger=true$/);
 });
 
 // ---------------------------------------------------------------------------
