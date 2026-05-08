@@ -269,6 +269,27 @@ test('buildDevUrl: always appends ?debugger=true so the campaign cart SDK debug 
     assert.match(buildDevUrl(3000, 'my-campaign', 'checkout/step-1'), /\?debugger=true$/);
 });
 
+test('buildDevUrl: merges existing query string in entry_url with debugger flag', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', 'presell?utm_source=google'),
+        'http://localhost:3000/my-campaign/presell/?utm_source=google&debugger=true'
+    );
+});
+
+test('buildDevUrl: handles entry_url with multiple query params', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', '/presell/?utm_source=google&utm_medium=cpc'),
+        'http://localhost:3000/my-campaign/presell/?utm_source=google&utm_medium=cpc&debugger=true'
+    );
+});
+
+test('buildDevUrl: trailing ? on entry_url does not produce empty query segment', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', 'presell?'),
+        'http://localhost:3000/my-campaign/presell/?debugger=true'
+    );
+});
+
 // ---------------------------------------------------------------------------
 // validateEntryUrl — checks entry_url resolves to a real source page
 // ---------------------------------------------------------------------------
@@ -311,6 +332,12 @@ test('validateEntryUrl: returns null when target page exists with .html', () => 
 test('validateEntryUrl: returns null for nested page that exists', () => {
     const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/checkout/step-1.html']);
     try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'checkout/step-1'), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: strips query string before matching the source page', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'presell?test=value'), null); }
     finally { cleanup(); }
 });
 
