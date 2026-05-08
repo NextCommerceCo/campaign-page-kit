@@ -252,15 +252,42 @@ test('normalizeEntryUrl: preserves nested path segments', () => {
 // ---------------------------------------------------------------------------
 
 test('buildDevUrl: returns campaign root when entry_url is missing', () => {
-    assert.equal(buildDevUrl(3000, 'my-campaign'), 'http://localhost:3000/my-campaign/');
+    assert.equal(buildDevUrl(3000, 'my-campaign'), 'http://localhost:3000/my-campaign/?debugger=true');
 });
 
 test('buildDevUrl: appends entry_url page', () => {
-    assert.equal(buildDevUrl(3000, 'my-campaign', 'presell'), 'http://localhost:3000/my-campaign/presell/');
+    assert.equal(buildDevUrl(3000, 'my-campaign', 'presell'), 'http://localhost:3000/my-campaign/presell/?debugger=true');
 });
 
 test('buildDevUrl: appends entry_url with .html extension stripped', () => {
-    assert.equal(buildDevUrl(8080, 'drift-v1', 'landing.html'), 'http://localhost:8080/drift-v1/landing/');
+    assert.equal(buildDevUrl(8080, 'drift-v1', 'landing.html'), 'http://localhost:8080/drift-v1/landing/?debugger=true');
+});
+
+test('buildDevUrl: always appends ?debugger=true so the campaign cart SDK debug toolbar shows locally', () => {
+    assert.match(buildDevUrl(3000, 'my-campaign'), /\?debugger=true$/);
+    assert.match(buildDevUrl(3000, 'my-campaign', 'presell'), /\?debugger=true$/);
+    assert.match(buildDevUrl(3000, 'my-campaign', 'checkout/step-1'), /\?debugger=true$/);
+});
+
+test('buildDevUrl: merges existing query string in entry_url with debugger flag', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', 'presell?utm_source=google'),
+        'http://localhost:3000/my-campaign/presell/?utm_source=google&debugger=true'
+    );
+});
+
+test('buildDevUrl: handles entry_url with multiple query params', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', '/presell/?utm_source=google&utm_medium=cpc'),
+        'http://localhost:3000/my-campaign/presell/?utm_source=google&utm_medium=cpc&debugger=true'
+    );
+});
+
+test('buildDevUrl: trailing ? on entry_url does not produce empty query segment', () => {
+    assert.equal(
+        buildDevUrl(3000, 'my-campaign', 'presell?'),
+        'http://localhost:3000/my-campaign/presell/?debugger=true'
+    );
 });
 
 // ---------------------------------------------------------------------------
@@ -305,6 +332,12 @@ test('validateEntryUrl: returns null when target page exists with .html', () => 
 test('validateEntryUrl: returns null for nested page that exists', () => {
     const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/checkout/step-1.html']);
     try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'checkout/step-1'), null); }
+    finally { cleanup(); }
+});
+
+test('validateEntryUrl: strips query string before matching the source page', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'presell?test=value'), null); }
     finally { cleanup(); }
 });
 
