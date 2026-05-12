@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { parsePort, normalizeEntryUrl, buildDevUrl, validateEntryUrl } = require('../lib/actions/dev');
+const { parsePort, parseCampaign, normalizeEntryUrl, buildDevUrl, validateEntryUrl } = require('../lib/actions/dev');
 
 // ---------------------------------------------------------------------------
 // Helpers — stub logger.error and process.exit for validation tests
@@ -192,6 +192,78 @@ test('parsePort: accepts port 1 (minimum valid)', () => {
 
 test('parsePort: accepts port 65535 (maximum valid)', () => {
     assert.equal(parsePort(['node', 'dev.js', '-p', '65535']), 65535);
+});
+
+// ---------------------------------------------------------------------------
+// parseCampaign — CLI flags and bare positional
+// ---------------------------------------------------------------------------
+
+test('parseCampaign: returns null when no campaign args provided', () => {
+    assert.equal(parseCampaign(['node', 'dev.js']), null);
+});
+
+test('parseCampaign: parses --campaign flag', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '--campaign', 'my-camp']), 'my-camp');
+});
+
+test('parseCampaign: parses -c flag', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '-c', 'my-camp']), 'my-camp');
+});
+
+test('parseCampaign: parses --campaign=VALUE syntax', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '--campaign=my-camp']), 'my-camp');
+});
+
+test('parseCampaign: parses bare non-numeric first positional', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', 'my-camp']), 'my-camp');
+});
+
+test('parseCampaign: ignores bare numeric first positional (reserved for port)', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '3333']), null);
+});
+
+test('parseCampaign: ignores leading flag tokens', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '--port', '8080']), null);
+});
+
+test('parseCampaign: flag takes precedence over bare positional', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', 'positional', '--campaign', 'flagged']), 'flagged');
+});
+
+test('parseCampaign: trims surrounding whitespace from value', () => {
+    assert.equal(parseCampaign(['node', 'dev.js', '--campaign', '  my-camp  ']), 'my-camp');
+});
+
+test('parseCampaign: exits with error for --campaign without a value', () => {
+    withValidationStubs(({ getError, didExit }) => {
+        parseCampaign(['node', 'dev.js', '--campaign']);
+        assert.ok(didExit());
+        assert.match(getError(), /--campaign requires a slug/);
+    });
+});
+
+test('parseCampaign: exits with error for -c without a value', () => {
+    withValidationStubs(({ getError, didExit }) => {
+        parseCampaign(['node', 'dev.js', '-c']);
+        assert.ok(didExit());
+        assert.match(getError(), /--campaign requires a slug/);
+    });
+});
+
+test('parseCampaign: exits when --campaign is followed by another flag', () => {
+    withValidationStubs(({ getError, didExit }) => {
+        parseCampaign(['node', 'dev.js', '--campaign', '--port', '8080']);
+        assert.ok(didExit());
+        assert.match(getError(), /--campaign requires a slug/);
+    });
+});
+
+test('parseCampaign: exits with error for empty --campaign=', () => {
+    withValidationStubs(({ getError, didExit }) => {
+        parseCampaign(['node', 'dev.js', '--campaign=']);
+        assert.ok(didExit());
+        assert.match(getError(), /--campaign requires a slug/);
+    });
 });
 
 // ---------------------------------------------------------------------------
