@@ -161,7 +161,7 @@ In this mode, stdout carries exactly one JSON document and nothing else. Warning
 ```bash
 npm run build -- --json                     # output build summary as json (the -- forwards the flag)
 npx campaign-build --json | jq '.pages'     # access .pages directly
-npx campaign-build --json > manifest.json   # output to file
+npx campaign-build --json > build-output.json   # output to file
 ```
 
 A build of two pages, where `presell.html` is missing its `page_type` frontmatter, produces:

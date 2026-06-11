@@ -654,6 +654,25 @@ test('build: render error reported with status error and RENDER_ERROR entry', as
     });
 });
 
+test('build: error code names the failed step — malformed frontmatter is FRONTMATTER_ERROR', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: [unclosed\n---\n<p>hi</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.errors, 1);
+        const page = summary.pages[0];
+        assert.equal(page.status, 'error');
+        assert.equal(page.errors[0].code, 'FRONTMATTER_ERROR');
+        // failed before URL resolution, so routing fields stay null
+        assert.equal(page.url, null);
+        assert.equal(page.outputFile, null);
+    });
+});
+
 test('build: warns NESTED_NO_PERMALINK for nested page file without permalink', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
