@@ -140,11 +140,98 @@ npm run dev -c my-campaign -p 8080     # specific campaign and port
 
 ### Build
 
-Output will be in the `_site` directory:
+Build every campaign into the `_site` directory:
 
 ```bash
 npm run build
 ```
+
+The command exits `1` when any page fails to render, and `0` otherwise. Build warnings (documented below) never change the exit code.
+
+| Flag | Purpose |
+|---|---|
+| `--json` | Print the build summary as a JSON document on stdout instead of the human-readable log |
+
+#### JSON build summary (`--json`)
+
+`campaign-build --json` reports, for every page in the build, which source file was rendered, which URL it resolved to, and which output file it was written to — in a form that CI jobs and scripts can consume directly.
+
+In this mode, stdout carries exactly one JSON document and nothing else. Warnings, errors, and debug lines all go to stderr, so the summary can be piped or redirected without any filtering:
+
+```bash
+npm run build -- --json                     # output build summary as json (the -- forwards the flag)
+npx campaign-build --json | jq '.pages'     # access .pages directly
+npx campaign-build --json > build-output.json   # output to file
+```
+
+A build of two pages, where `presell.html` is missing its `page_type` frontmatter, produces:
+
+```json
+{
+  "built": 2,
+  "errors": 0,
+  "warnings": 1,
+  "skipped": 0,
+  "ms": 312,
+  "pages": [
+    {
+      "inputFile": "src/my-campaign/checkout.html",
+      "campaignSlug": "my-campaign",
+      "url": "/my-campaign/checkout/",
+      "outputFile": "_site/my-campaign/checkout/index.html",
+      "status": "built",
+      "warnings": [],
+      "errors": []
+    },
+    {
+      "inputFile": "src/my-campaign/presell.html",
+      "campaignSlug": "my-campaign",
+      "url": "/my-campaign/presell/",
+      "outputFile": "_site/my-campaign/presell/index.html",
+      "status": "built",
+      "warnings": [
+        { "code": "MISSING_FRONTMATTER", "message": "missing required frontmatter: page_type" }
+      ],
+      "errors": []
+    }
+  ]
+}
+```
+
+Top-level fields:
+
+| Field | Description |
+|-------|-------------|
+| `built`, `errors`, `skipped` | Page counts by outcome. Every page appears in `pages` with the matching `status`, so these always sum to `pages.length` |
+| `warnings` | Total number of warning entries across all pages |
+| `ms` | Build duration in milliseconds |
+
+Per-page fields:
+
+| Field | Description |
+|-------|-------------|
+| `inputFile` | The source file the page was built from, relative to the project root |
+| `campaignSlug` | The campaign the page belongs to — its first directory under `src/` |
+| `url` | The root-relative URL path the page is served at, e.g. `/my-campaign/checkout/`. This is the same value templates see as `page.url`. `null` when the build failed before the URL could be resolved |
+| `outputFile` | The file the rendered page was written to, relative to the project root. `null` under the same condition as `url` |
+| `status` | `built` — rendered and written. `error` — rendering failed; see `errors`. `skipped` — the slug has no entry in `_data/campaigns.json`, so the page was not built |
+| `warnings` | Non-fatal findings for this page, each `{ code, message }`. Codes are documented below |
+| `errors` | Why the page failed, each `{ code, message }`. Empty unless `status` is `error` |
+
+The same object is returned programmatically by `build()` in `lib/engine/build`. The new fields are additive — callers that destructure `{ built, errors, ms }` keep working unchanged.
+
+#### Build warnings
+
+A build can succeed and still be wrong: a misplaced file builds to a different URL than its folder structure suggests, or a typo'd layout name silently renders the page with no layout at all. The build flags these conditions as warnings. They are printed to stderr in every mode, attached to the affected page in the JSON summary, and never fail the build.
+
+| Code | Meaning |
+|------|---------|
+| `NESTED_NO_PERMALINK` | The page file sits in a subdirectory but declares no `permalink`. Routing uses only the campaign slug and the filename, so the intermediate directories are dropped: `src/my-campaign/checkout/index.html` builds to `/my-campaign/` — **not** `/my-campaign/checkout/`. Declare a `permalink` to control the URL |
+| `DUPLICATE_OUTPUT` | Two source files resolve to the same output file. The page built last silently overwrites the other |
+| `LAYOUT_NOT_FOUND` | The layout named in `page_layout` does not exist in `src/<slug>/_layouts/`, so the page was rendered without any layout |
+| `MISSING_FRONTMATTER` | The page is missing `title` or `page_type` in its frontmatter — both are required (see [Page Frontmatter](#page-frontmatter)) |
+| `INVALID_PAGE_TYPE` | `page_type` is not one of `product`, `checkout`, `upsell`, `receipt` |
+| `NO_CAMPAIGN` | The page's slug has no entry in `_data/campaigns.json`, so it was not built (`status` is `skipped`) |
 
 ### Clone Campaign
 

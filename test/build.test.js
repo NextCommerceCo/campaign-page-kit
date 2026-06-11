@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 const { resolveOutput } = require('../lib/engine/build');
 const { createEngine, renderPage } = require('../lib/engine/render');
@@ -572,6 +576,215 @@ test('build: CPK_ENV overrides default environment', async () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// build() — per-page summary and build warnings
+// ---------------------------------------------------------------------------
+
+const VALID_PAGE = '---\ntitle: Checkout\npage_type: checkout\n---\n<p>ok</p>';
+
+function warningCodes(page) {
+    return page.warnings.map(w => w.code);
+}
+
+test('build: returns per-page summary for a built page', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/_layouts/base.html', BASE_LAYOUT);
+        writeFixture(srcPath, 'test-campaign/checkout.html', VALID_PAGE);
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.built, 1);
+        assert.equal(summary.errors, 0);
+        assert.equal(summary.warnings, 0);
+        assert.equal(summary.skipped, 0);
+        assert.equal(summary.pages.length, 1);
+
+        const page = summary.pages[0];
+        assert.equal(page.inputFile, path.relative(process.cwd(), path.join(srcPath, 'test-campaign/checkout.html')));
+        assert.equal(page.campaignSlug, 'test-campaign');
+        assert.equal(page.url, '/test-campaign/checkout/');
+        assert.equal(page.outputFile, path.relative(process.cwd(), path.join(outputPath, 'test-campaign', 'checkout', 'index.html')));
+        assert.equal(page.status, 'built');
+        assert.deepEqual(page.warnings, []);
+        assert.deepEqual(page.errors, []);
+    });
+});
+
+test('build: skipped page reported with status skipped and NO_CAMPAIGN warning', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'unknown-campaign/index.html', VALID_PAGE);
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.built, 0);
+        assert.equal(summary.skipped, 1);
+
+        const page = summary.pages[0];
+        assert.equal(page.status, 'skipped');
+        assert.equal(page.campaignSlug, 'unknown-campaign');
+        assert.equal(page.url, null);
+        assert.equal(page.outputFile, null);
+        assert.deepEqual(warningCodes(page), ['NO_CAMPAIGN']);
+    });
+});
+
+test('build: render error reported with status error and RENDER_ERROR entry', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n{% unknowntag %}');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.errors, 1);
+        const page = summary.pages[0];
+        assert.equal(page.status, 'error');
+        assert.equal(page.errors.length, 1);
+        assert.equal(page.errors[0].code, 'RENDER_ERROR');
+        assert.ok(page.errors[0].message.length > 0);
+        // url was resolved before the render failed
+        assert.equal(page.url, '/test-campaign/');
+    });
+});
+
+test('build: error code names the failed step — malformed frontmatter is FRONTMATTER_ERROR', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: [unclosed\n---\n<p>hi</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.errors, 1);
+        const page = summary.pages[0];
+        assert.equal(page.status, 'error');
+        assert.equal(page.errors[0].code, 'FRONTMATTER_ERROR');
+        // failed before URL resolution, so routing fields stay null
+        assert.equal(page.url, null);
+        assert.equal(page.outputFile, null);
+    });
+});
+
+test('build: warns NESTED_NO_PERMALINK for nested page file without permalink', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/checkout/step2.html', VALID_PAGE);
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        const page = summary.pages[0];
+        assert.ok(warningCodes(page).includes('NESTED_NO_PERMALINK'));
+        // and the surprising resolution is visible: intermediate dir dropped
+        assert.equal(page.url, '/test-campaign/step2/');
+    });
+});
+
+test('build: no NESTED_NO_PERMALINK when nested page declares a permalink', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/checkout/step2.html',
+            '---\ntitle: Step 2\npage_type: checkout\npermalink: test-campaign/checkout/step2\n---\n<p>ok</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        const page = summary.pages[0];
+        assert.ok(!warningCodes(page).includes('NESTED_NO_PERMALINK'));
+        assert.equal(page.url, '/test-campaign/checkout/step2/');
+    });
+});
+
+test('build: warns LAYOUT_NOT_FOUND only for explicitly declared missing layout', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        // declared layout missing → warning
+        writeFixture(srcPath, 'test-campaign/checkout.html',
+            '---\ntitle: Checkout\npage_type: checkout\npage_layout: custom.html\n---\n<p>ok</p>');
+        // default base.html missing (undeclared) → no layout warning
+        writeFixture(srcPath, 'test-campaign/receipt.html',
+            '---\ntitle: Receipt\npage_type: receipt\n---\n<p>ok</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        const declared = summary.pages.find(p => p.url === '/test-campaign/checkout/');
+        const defaulted = summary.pages.find(p => p.url === '/test-campaign/receipt/');
+        assert.deepEqual(warningCodes(declared), ['LAYOUT_NOT_FOUND']);
+        assert.deepEqual(warningCodes(defaulted), []);
+        // both still build — warning is non-fatal
+        assert.equal(summary.built, 2);
+        assert.equal(summary.errors, 0);
+    });
+});
+
+test('build: warns INVALID_PAGE_TYPE for unknown page_type', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: landing\n---\n<p>ok</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.deepEqual(warningCodes(summary.pages[0]), ['INVALID_PAGE_TYPE']);
+        assert.equal(summary.built, 1);
+    });
+});
+
+test('build: warns MISSING_FRONTMATTER for missing title and page_type', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\n---\n<p>ok</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        const page = summary.pages[0];
+        assert.deepEqual(warningCodes(page), ['MISSING_FRONTMATTER', 'MISSING_FRONTMATTER']);
+        assert.ok(page.warnings.some(w => w.message.includes('title')));
+        assert.ok(page.warnings.some(w => w.message.includes('page_type')));
+        assert.equal(summary.warnings, 2);
+    });
+});
+
+test('build: warns DUPLICATE_OUTPUT when two inputs resolve to the same output file', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', VALID_PAGE);
+        // nested index resolves to /test-campaign/ too — silent overwrite today
+        writeFixture(srcPath, 'test-campaign/checkout/index.html', VALID_PAGE);
+
+        const summary = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            files: ['test-campaign/index.html', 'test-campaign/checkout/index.html'],
+        });
+
+        const first = summary.pages[0];
+        const second = summary.pages[1];
+        assert.equal(first.url, '/test-campaign/');
+        assert.equal(second.url, '/test-campaign/');
+        assert.ok(!warningCodes(first).includes('DUPLICATE_OUTPUT'));
+        assert.ok(warningCodes(second).includes('DUPLICATE_OUTPUT'));
+        assert.ok(second.warnings.find(w => w.code === 'DUPLICATE_OUTPUT').message.includes(first.inputFile));
+    });
+});
+
 test('build: renders page without layout when none exists', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
@@ -588,5 +801,72 @@ test('build: renders page without layout when none exists', async () => {
         assert.equal(errors, 0);
         const html = fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8');
         assert.equal(html, '<p>no layout</p>');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// campaign-build --json — CLI integration (spawned process)
+// ---------------------------------------------------------------------------
+
+const BUILD_BIN = path.join(__dirname, '..', 'lib', 'actions', 'build.js');
+
+test('campaign-build --json: stdout is exactly the JSON summary', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/_layouts/base.html', BASE_LAYOUT);
+        writeFixture(dir, 'src/test-campaign/checkout.html',
+            '---\ntitle: Checkout\npage_type: checkout\n---\n<p>ok</p>');
+        // a page with warnings, to prove they land in JSON not stdout noise
+        writeFixture(dir, 'src/test-campaign/index.html', '---\n---\n<p>home</p>');
+
+        const { stdout } = await execFileAsync(process.execPath, [BUILD_BIN, '--json'], { cwd: dir });
+
+        // stdout must be a single parseable JSON document — no banner, no log lines
+        const summary = JSON.parse(stdout);
+        assert.equal(summary.built, 2);
+        assert.equal(summary.errors, 0);
+        assert.equal(summary.warnings, 2);
+        assert.equal(summary.skipped, 0);
+        assert.equal(summary.pages.length, 2);
+
+        const checkout = summary.pages.find(p => p.url === '/test-campaign/checkout/');
+        assert.equal(checkout.status, 'built');
+        assert.equal(checkout.outputFile, path.join('_site', 'test-campaign', 'checkout', 'index.html'));
+    });
+});
+
+test('campaign-build --json: exits 1 and still emits JSON when a page errors', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n{% unknowntag %}');
+
+        await assert.rejects(
+            execFileAsync(process.execPath, [BUILD_BIN, '--json'], { cwd: dir }),
+            (err) => {
+                assert.equal(err.code, 1);
+                const summary = JSON.parse(err.stdout);
+                assert.equal(summary.errors, 1);
+                assert.equal(summary.pages[0].status, 'error');
+                assert.equal(summary.pages[0].errors[0].code, 'RENDER_ERROR');
+                return true;
+            }
+        );
+    });
+});
+
+test('campaign-build (default): human summary on stdout, not JSON', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+
+        const { stdout } = await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
+
+        assert.match(stdout, /Built 1 page/);
+        assert.throws(() => JSON.parse(stdout));
     });
 });
