@@ -20,6 +20,7 @@ test('resolveTemplateSource: empty/unknown family resolves to the public default
         assert.equal(src.private, false);
         assert.match(src.templates_url, /raw\.githubusercontent\.com\/NextCommerceCo\/campaign-cart-starter-templates\/main\/templates\.json$/);
         assert.match(src.tarball_url_anonymous, /codeload\.github\.com\/NextCommerceCo\/campaign-cart-starter-templates\/tar\.gz\/refs\/heads\/main$/);
+        assert.equal(src.source_path, 'src/');
     }
 });
 
@@ -37,7 +38,7 @@ test('resolveTemplateSource: arjuna resolves to the private adsbranded repo', ()
     assert.equal(src.ref, 'main');
     assert.equal(src.private, true);
     // Private tarball uses the authenticated api.github.com endpoint.
-    assert.match(src.tarball_url, /api\.github\.com\/repos\/Sellmore-Co\/adsbranded-templates\/tarball\/main$/);
+    assert.match(src.tarball_url_authenticated, /api\.github\.com\/repos\/Sellmore-Co\/adsbranded-templates\/tarball\/main$/);
     assert.match(src.campaigns_url, /Sellmore-Co\/adsbranded-templates\/main\/_data\/campaigns\.json$/);
 });
 
