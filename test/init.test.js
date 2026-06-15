@@ -23,7 +23,27 @@ const {
     validateSlug,
     aiContextTarget,
     buildAiContextContent,
+    isTrustedGithubRedirect,
 } = require('../lib/actions/init');
+
+// ---------------------------------------------------------------------------
+// isTrustedGithubRedirect — authed-tarball redirect host pinning
+// ---------------------------------------------------------------------------
+
+test('isTrustedGithubRedirect: allows https GitHub-owned hosts', () => {
+    assert.equal(isTrustedGithubRedirect('https://codeload.github.com/o/r/tar.gz/x'), true);
+    assert.equal(isTrustedGithubRedirect('https://api.github.com/repos/o/r/tarball/main'), true);
+    assert.equal(isTrustedGithubRedirect('https://objects.githubusercontent.com/abc'), true);
+    assert.equal(isTrustedGithubRedirect('https://github.com/o/r'), true);
+});
+
+test('isTrustedGithubRedirect: rejects non-https, foreign hosts, and look-alikes', () => {
+    assert.equal(isTrustedGithubRedirect('http://codeload.github.com/x'), false);      // downgrade
+    assert.equal(isTrustedGithubRedirect('https://attacker.example/x'), false);        // foreign host
+    assert.equal(isTrustedGithubRedirect('https://github.com.attacker.io/x'), false);  // suffix look-alike
+    assert.equal(isTrustedGithubRedirect('https://notgithub.com/x'), false);
+    assert.equal(isTrustedGithubRedirect('not a url'), false);
+});
 
 // ---------------------------------------------------------------------------
 // slugify
