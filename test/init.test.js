@@ -24,6 +24,7 @@ const {
     aiContextTarget,
     buildAiContextContent,
     isTrustedGithubRedirect,
+    fetchBufferAuthed,
 } = require('../lib/actions/init');
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,45 @@ test('isTrustedGithubRedirect: rejects non-https, foreign hosts, and look-alikes
     assert.equal(isTrustedGithubRedirect('https://github.com.attacker.io/x'), false);  // suffix look-alike
     assert.equal(isTrustedGithubRedirect('https://notgithub.com/x'), false);
     assert.equal(isTrustedGithubRedirect('not a url'), false);
+});
+
+// End-to-end: the authed fetch must DROP the Authorization header when it follows
+// the signed 302 to codeload — the whole reason fetchBufferAuthed exists. Mock the
+// shared https.get and assert the redirect request carries no token.
+test('fetchBufferAuthed drops the Authorization header on redirect', async () => {
+    const https = require('https');
+    const { EventEmitter } = require('events');
+    const original = https.get;
+    const calls = [];
+    https.get = (url, optionsOrCb, maybeCb) => {
+        const options = typeof optionsOrCb === 'function' ? {} : (optionsOrCb || {});
+        const cb = typeof optionsOrCb === 'function' ? optionsOrCb : maybeCb;
+        calls.push({ url: String(url), headers: options.headers || {} });
+        const res = new EventEmitter();
+        res.resume = () => {};
+        if (calls.length === 1) {
+            res.statusCode = 302;
+            res.headers = { location: 'https://codeload.github.com/o/r/tar.gz/main' };
+            process.nextTick(() => cb(res));
+        } else {
+            res.statusCode = 200;
+            res.headers = {};
+            process.nextTick(() => {
+                cb(res);
+                process.nextTick(() => { res.emit('data', Buffer.from('ok')); res.emit('end'); });
+            });
+        }
+        return { on: () => {} }; // .on('error', …) is chained but never fires here
+    };
+    try {
+        const buf = await fetchBufferAuthed('https://api.github.com/repos/o/r/tarball/main', 'secret-token');
+        assert.equal(buf.toString(), 'ok');
+        assert.equal(calls.length, 2, 'made the initial request + followed the redirect');
+        assert.equal(calls[0].headers.Authorization, 'Bearer secret-token', 'initial request carries the token');
+        assert.equal(calls[1].headers.Authorization, undefined, 'redirect request drops the token');
+    } finally {
+        https.get = original;
+    }
 });
 
 // ---------------------------------------------------------------------------
