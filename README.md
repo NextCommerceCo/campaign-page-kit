@@ -105,10 +105,17 @@ To pull from your own templates, add sources to **`_data/template-sources.json`*
 ```json
 {
   "sources": {
-    "acme":      { "type": "git",   "label": "Acme private templates",
-                   "url": "git@github.com:AcmeCo/campaign-templates.git", "ref": "main" },
-    "local-dev": { "type": "local", "label": "Local working copy",
-                   "path": "../campaign-cart-starter-templates" }
+    "acme": {
+      "type": "git",
+      "label": "Acme private templates",
+      "url": "git@github.com:AcmeCo/campaign-templates.git",
+      "ref": "main"
+    },
+    "local-dev": {
+      "type": "local",
+      "label": "Local working copy",
+      "path": "../campaign-cart-starter-templates"
+    }
   }
 }
 ```
