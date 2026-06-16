@@ -366,6 +366,13 @@ test('parseArgs: handles --key value and --key=value forms', () => {
     assert.equal(b.values.template, 'olympus');
 });
 
+test('parseArgs: accepts --source', () => {
+    const a = parseArgs(['--source', 'acme', '--template', 'olympus'], FLAG_SCHEMA);
+    assert.deepEqual(a.errors, []);
+    assert.equal(a.values.source, 'acme');
+    assert.equal(a.values.template, 'olympus');
+});
+
 test('parseArgs: boolean flags default to true and accept =false', () => {
     const a = parseArgs(['--non-interactive'], FLAG_SCHEMA);
     assert.equal(a.values.nonInteractive, true);
