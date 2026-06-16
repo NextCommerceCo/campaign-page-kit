@@ -287,6 +287,11 @@ test('resolveLocalRoot: expands ~, resolves against brandRoot, throws on missing
     rm(brand);
 });
 
+test('resolveLocalRoot: rejects ~user paths with a clear error', () => {
+    assert.throws(() => resolveLocalRoot({ path: '~bob/templates' }, {}),
+        (e) => e.code === 'INVALID_INPUT' && /~user/.test(e.message));
+});
+
 // ---------------------------------------------------------------------------
 // cloneToTemp + git provider (injected exec — no real network)
 // ---------------------------------------------------------------------------
@@ -315,6 +320,13 @@ test('cloneToTemp: maps ENOENT to a "git not installed" error and cleans up', as
     await assert.rejects(
         cloneToTemp({ url: 'g' }, { exec: () => { const e = new Error('x'); e.code = 'ENOENT'; throw e; } }),
         (e) => e.code === 'UPSTREAM_FETCH_FAILED' && /git is not installed/.test(e.message)
+    );
+});
+
+test('cloneToTemp: maps a killed (timed-out) clone to a timeout error', async () => {
+    await assert.rejects(
+        cloneToTemp({ url: 'g' }, { exec: () => { const e = new Error('timed out'); e.killed = true; throw e; } }),
+        (e) => e.code === 'UPSTREAM_FETCH_FAILED' && /timed out/.test(e.message)
     );
 });
 
@@ -371,9 +383,16 @@ test('GithubProvider: builds raw/codeload URLs and reads/materializes', async ()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-out-'));
     assert.equal(await provider.materialize('olympus', path.join(out, 'olympus')), 1);
-    assert.ok(seen.some(u => u.includes('codeload') && u.includes('/main')));
+    // bare ref (no refs/heads) so tags/SHAs resolve too
+    assert.ok(seen.some(u => u.endsWith('/tar.gz/main')));
+    assert.ok(!seen.some(u => u.includes('refs/heads')));
     provider.dispose();
     rm(out);
+});
+
+test('GithubProvider: tarball URL uses the bare ref so tags resolve', () => {
+    const provider = new GithubProvider({ repo: 'a/b', ref: 'v1.2.0' }, {});
+    assert.equal(provider._tarballUrl(), 'https://codeload.github.com/a/b/tar.gz/v1.2.0');
 });
 
 // ---------------------------------------------------------------------------
