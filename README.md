@@ -39,7 +39,7 @@ npx campaign-init
 
 1. Adds CLI scripts (`dev`, `build`, `clone`, `config`, `compress`, `migrate`, …) to your `package.json`
 2. Creates an empty `_data/campaigns.json` registry
-3. Fetches the list of available starter templates from [campaign-cart-starter-templates](https://github.com/NextCommerceCo/campaign-cart-starter-templates) and shows a picker
+3. Asks which **template source** to use (the public starter library by default — see [Template sources](#template-sources)), then fetches that source's template list and shows a picker
 4. Asks for your **Campaign name** (display name) and **Campaign slug** (directory + URL path, e.g. `/my-campaign/`)
 5. Downloads only the chosen template's `src/<slug>/` files into your project
 6. Merges the template's registry data into your local `_data/campaigns.json` under your chosen slug
@@ -79,7 +79,8 @@ npx campaign-init --json \
 
 | Flag | Purpose |
 |---|---|
-| `--template <slug>` | Starter template slug (must exist in upstream `templates.json`) |
+| `--source <name>` | Template source to pull from (defaults to `public`; see [Template sources](#template-sources)) |
+| `--template <slug>` | Starter template slug (must exist in the source's `templates.json`) |
 | `--slug <name>` | Local campaign slug (folder under `src/`, also URL path) |
 | `--name <"display">` | Display name (defaults to upstream template name) |
 | `--api-key <key>` | Campaign Cart API key, written to `assets/config.js` |
@@ -94,6 +95,93 @@ npx campaign-init --json \
 **Exit codes:** `0` ok · `2` template not found · `3` target conflict (use `--overwrite`) · `4` upstream fetch failed · `5` missing required input · `6` invalid input · `7` partial write rolled back · `8` rollback failed.
 
 `--ai-context` writes the upstream context doc verbatim (with a sentinel header) to wherever the chosen tool auto-loads it: `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/campaign-page-kit.mdc`, or `.github/copilot-instructions.md`.
+
+#### Template sources
+
+By default `campaign-init` pulls templates from the public [campaign-cart-starter-templates](https://github.com/NextCommerceCo/campaign-cart-starter-templates) repo. That source — named `public` — is built in; you don't configure it and existing projects need no changes.
+
+To pull from your own templates, add sources to **`_data/template-sources.json`**. The file is additive: it lists only *your* sources, and `public` is always available alongside them (the name `public` is reserved). With no file, behaviour is exactly as before.
+
+```json
+{
+  "sources": {
+    "acme": {
+      "type": "git",
+      "label": "Acme private templates",
+      "url": "git@github.com:AcmeCo/campaign-templates.git",
+      "ref": "main"
+    },
+    "local-dev": {
+      "type": "local",
+      "label": "Local working copy",
+      "path": "../campaign-cart-starter-templates"
+    }
+  }
+}
+```
+
+Source types:
+
+| `type` | Fields | How templates are read |
+|---|---|---|
+| `local` | `path` (relative to the project, `~` expanded) | Read straight off disk — ideal for developing templates |
+| `git` | `url` (SSH), optional `ref` | Shallow `git clone` over SSH using your **ambient keys**; omit `ref` to use the repo's default branch, or set a branch/tag to pin |
+
+> [!IMPORTANT]
+> A source — git repo or local directory — must have a `templates.json` catalog at its root and a `src/<slug>/` tree for each template it lists. Same layout as the public repo.
+
+The layout:
+
+```
+your-templates/
+├── templates.json
+└── src/
+    ├── olympus/        # one folder per template slug
+    │   └── …
+    └── limos/
+        └── …
+```
+
+`templates.json` is the catalog the picker reads — an array of entries, one per template:
+
+```json
+{
+  "templates": [
+    {
+      "slug": "olympus",
+      "name": "Olympus",
+      "description": "One-page checkout funnel",
+      "priority": 100
+    },
+    {
+      "slug": "limos",
+      "name": "Limos",
+      "description": "Three-step checkout",
+      "priority": 50,
+      "deprecated": true
+    }
+  ]
+}
+```
+
+| Field | Required | Purpose |
+|---|---|---|
+| `slug` | ✅ | Folder name under `src/`; the value passed to `--template` |
+| `name` | ✅ | Display label in the picker |
+| `description` | — | Picker hint line |
+| `priority` | — | Higher sorts first (default `0`); ties break by name |
+| `deprecated` | — | Prefixes the label with `[DEPRECATED]` |
+| `hidden` | — | Omits the entry from the picker |
+
+**Pick / add / remove — interactively:** in the `campaign-init` picker, the first step selects the source and includes **➕ Add a template source…** and **🗑 Remove a template source…**. Adding verifies the source actually exposes a usable `templates.json` (for `git`, this clones once); removal only ever touches your own entries (the built-in `public` is never listed). Agents can manage sources by editing `_data/template-sources.json` directly.
+
+**Non-interactive (agents, CI):** there is no flag to *add* a source — `--source <name>` only *selects* one that already exists. To add a source headlessly, write the entry into `_data/template-sources.json` (the additive file shown above), then init with `--source`. With no `--source`, the default (`public`, or the file's `default`) is used.
+
+```bash
+npx campaign-init --non-interactive --json \
+    --source acme --template olympus --slug grounding-mat-v2 \
+    --name "Grounding Mat V2" --api-key "$CAMPAIGN_API_KEY"
+```
 
 ### 4. Start the development server
 
