@@ -127,7 +127,51 @@ Source types:
 | `local` | `path` (relative to the project, `~` expanded) | Read straight off disk — ideal for developing templates |
 | `git` | `url` (SSH), optional `ref` | Shallow `git clone` over SSH using your **ambient keys**; omit `ref` to use the repo's default branch, or set a branch/tag to pin |
 
-A source must contain a `templates.json` at its root and a `src/<slug>/` tree per template — the same layout as the public repo.
+> [!IMPORTANT]
+> A source — git repo or local directory — must have a `templates.json` catalog at its root and a `src/<slug>/` tree for each template it lists. Same layout as the public repo.
+
+The layout:
+
+```
+your-templates/
+├── templates.json
+└── src/
+    ├── olympus/        # one folder per template slug
+    │   └── …
+    └── limos/
+        └── …
+```
+
+`templates.json` is the catalog the picker reads — an array of entries, one per template:
+
+```json
+{
+  "templates": [
+    {
+      "slug": "olympus",
+      "name": "Olympus",
+      "description": "One-page checkout funnel",
+      "priority": 100
+    },
+    {
+      "slug": "limos",
+      "name": "Limos",
+      "description": "Three-step checkout",
+      "priority": 50,
+      "deprecated": true
+    }
+  ]
+}
+```
+
+| Field | Required | Purpose |
+|---|---|---|
+| `slug` | ✅ | Folder name under `src/`; the value passed to `--template` |
+| `name` | ✅ | Display label in the picker |
+| `description` | — | Picker hint line |
+| `priority` | — | Higher sorts first (default `0`); ties break by name |
+| `deprecated` | — | Prefixes the label with `[DEPRECATED]` |
+| `hidden` | — | Omits the entry from the picker |
 
 **Pick / add / remove — interactively:** in the `campaign-init` picker, the first step selects the source and includes **➕ Add a template source…** and **🗑 Remove a template source…**. Adding verifies the source actually exposes a usable `templates.json` (for `git`, this clones once); removal only ever touches your own entries (the built-in `public` is never listed). Agents can manage sources by editing `_data/template-sources.json` directly.
 
@@ -138,11 +182,6 @@ npx campaign-init --non-interactive --json \
     --source acme --template olympus --slug grounding-mat-v2 \
     --name "Grounding Mat V2" --api-key "$CAMPAIGN_API_KEY"
 ```
-
-An unknown `--source` exits `6` (invalid input) and lists the valid source names; a source whose `templates.json` can't be read exits `4` (upstream fetch failed).
-
-> [!IMPORTANT]
-> Never put a token or secret in `_data/template-sources.json` — it is committed with your project. Private `git` sources authenticate with your existing SSH keys; nothing secret is stored. Authenticated HTTPS sources (GitHub/GitLab API tokens) are not yet supported.
 
 ### 4. Start the development server
 

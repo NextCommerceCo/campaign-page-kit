@@ -4,14 +4,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
+const { EventEmitter } = require('events');
 
 const {
     BUILTIN_PUBLIC,
+    fetchBuffer,
     countFiles,
     copySubtree,
     extractTemplate,
     selectableTemplates,
-    PublicProvider,
+    GithubProvider,
     LocalRootProvider,
     createProvider,
     resolveLocalRoot,
@@ -346,10 +348,10 @@ test('git provider: clones via injected exec, reads + materializes, dispose remo
 });
 
 // ---------------------------------------------------------------------------
-// PublicProvider (injected fetchBuffer — no real network)
+// GithubProvider (injected fetchBuffer — no real network)
 // ---------------------------------------------------------------------------
 
-test('PublicProvider: builds raw/codeload URLs and reads/materializes', async () => {
+test('GithubProvider: builds raw/codeload URLs and reads/materializes', async () => {
     const tarball = buildFixtureTarball();
     const seen = [];
     const fetchBuffer = async (url) => {
@@ -398,4 +400,162 @@ test('validateSourceHasTemplates: not ok when templates.json is missing', async 
     const res = await validateSourceHasTemplates({ type: 'local', path: src }, {});
     assert.equal(res.ok, false);
     rm(src);
+});
+
+// ---------------------------------------------------------------------------
+// fetchBuffer (injected `get` — exercises redirect/status/error branches
+// without real network)
+// ---------------------------------------------------------------------------
+
+// Build a fake https.get: maps url -> { status, headers, chunks } or a request
+// error. Synthesizes a response EventEmitter and a request EventEmitter.
+function fakeGet(plans) {
+    return (url, cb) => {
+        const plan = plans[url];
+        const req = new EventEmitter();
+        if (!plan) { process.nextTick(() => req.emit('error', new Error(`no plan for ${url}`))); return req; }
+        if (plan.requestError) { process.nextTick(() => req.emit('error', plan.requestError)); return req; }
+        const res = new EventEmitter();
+        res.statusCode = plan.status;
+        res.headers = plan.headers || {};
+        res.resume = () => {};
+        process.nextTick(() => {
+            cb(res);
+            if (plan.status === 200) {
+                for (const c of (plan.chunks || [])) res.emit('data', Buffer.from(c));
+                res.emit('end');
+            }
+        });
+        return req;
+    };
+}
+
+test('fetchBuffer: resolves a 200 body as a Buffer', async () => {
+    const get = fakeGet({ 'https://x/t': { status: 200, chunks: ['he', 'llo'] } });
+    const buf = await fetchBuffer('https://x/t', 5, get);
+    assert.equal(buf.toString(), 'hello');
+});
+
+test('fetchBuffer: follows a redirect to the location, then 200', async () => {
+    const get = fakeGet({
+        'https://x/a': { status: 302, headers: { location: 'https://x/b' } },
+        'https://x/b': { status: 200, chunks: ['final'] },
+    });
+    const buf = await fetchBuffer('https://x/a', 5, get);
+    assert.equal(buf.toString(), 'final');
+});
+
+test('fetchBuffer: rejects "too many redirects" when the budget is exhausted', async () => {
+    const get = fakeGet({ 'https://x/loop': { status: 302, headers: { location: 'https://x/loop' } } });
+    await assert.rejects(fetchBuffer('https://x/loop', 0, get), /too many redirects/);
+});
+
+test('fetchBuffer: rejects on a non-200 status', async () => {
+    const get = fakeGet({ 'https://x/missing': { status: 404 } });
+    await assert.rejects(fetchBuffer('https://x/missing', 5, get), /HTTP 404/);
+});
+
+test('fetchBuffer: rejects on a request error', async () => {
+    const get = fakeGet({ 'https://x/boom': { requestError: new Error('socket hang up') } });
+    await assert.rejects(fetchBuffer('https://x/boom', 5, get), /socket hang up/);
+});
+
+// ---------------------------------------------------------------------------
+// defaultGitExec — real `git clone` of a local repo (no injection), covering
+// the production git path end to end.
+// ---------------------------------------------------------------------------
+
+function makeGitRepo() {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-gitrepo-'));
+    execSync('git init -q', { cwd: repo });
+    fs.mkdirSync(path.join(repo, 'src', 'olympus'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'templates.json'), JSON.stringify({ templates: [{ slug: 'olympus', name: 'O' }] }));
+    fs.writeFileSync(path.join(repo, 'src', 'olympus', 'page.html'), '<h1>o</h1>');
+    execSync('git add -A && git -c user.email=a@b.c -c user.name=x commit -qm init', { cwd: repo });
+    return repo;
+}
+
+test('cloneToTemp: really clones a local repo via the default git exec', async () => {
+    const repo = makeGitRepo();
+    const tmp = await cloneToTemp({ url: `file://${repo}` }, {}); // no ctx.exec → real git
+    assert.equal(fs.existsSync(path.join(tmp, 'templates.json')), true);
+    assert.equal(fs.existsSync(path.join(tmp, 'src', 'olympus', 'page.html')), true);
+    rm(tmp); rm(repo);
+});
+
+test('cloneToTemp: rejects UPSTREAM_FETCH_FAILED when the real clone fails', async () => {
+    await assert.rejects(
+        cloneToTemp({ url: 'file:///cpk/definitely/not/a/repo' }, {}),
+        (e) => e.code === 'UPSTREAM_FETCH_FAILED' && /git clone failed/.test(e.message)
+    );
+});
+
+// ---------------------------------------------------------------------------
+// Defensive-branch coverage (guards / fallbacks)
+// ---------------------------------------------------------------------------
+
+test('extractTemplate: throws when the tarball has no top-level directory', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-tar-'));
+    fs.writeFileSync(path.join(root, 'loose.txt'), 'x');
+    const tarball = execSync('tar -czf - loose.txt', { cwd: root });
+    rm(root);
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-out-'));
+    assert.throws(() => extractTemplate(tarball, 'olympus', path.join(out, 'x')), /no top-level directory/);
+    rm(out);
+});
+
+test('selectableTemplates: falls back to slug when name is missing', () => {
+    const r = selectableTemplates({ templates: [{ slug: 'zeta' }, { slug: 'alpha' }] });
+    assert.deepEqual(r.map(t => t.slug), ['alpha', 'zeta']);
+});
+
+test('resolveLocalRoot: empty path resolves to brandRoot', () => {
+    const brand = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-brand-'));
+    assert.equal(resolveLocalRoot({}, { brandRoot: brand }), brand);
+    rm(brand);
+});
+
+test('cloneToTemp: surfaces err.message when the failure has no stderr', async () => {
+    await assert.rejects(
+        cloneToTemp({ url: 'g' }, { exec: () => { throw new Error('boom'); } }),
+        (e) => e.code === 'UPSTREAM_FETCH_FAILED' && /git clone failed: boom/.test(e.message)
+    );
+});
+
+test('createProvider(github): defaults fetchBuffer when none is injected', () => {
+    const p = createProvider({ ...BUILTIN_PUBLIC });
+    assert.ok(p instanceof GithubProvider);
+});
+
+test('LocalRootProvider.dispose: swallows a throwing cleanup', async () => {
+    const src = makeSourceDir();
+    const p = new LocalRootProvider(() => ({ root: src, cleanup: () => { throw new Error('boom'); } }));
+    await p.readJson('templates.json'); // acquire
+    assert.doesNotThrow(() => p.dispose());
+    rm(src);
+});
+
+test('readSourcesFile: tolerates a file with no sources key', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-brand-'));
+    fs.mkdirSync(path.join(root, '_data'));
+    fs.writeFileSync(path.join(root, '_data', 'template-sources.json'), '{"default":"public"}');
+    assert.deepEqual(readSourcesFile(root), { default: 'public', sources: {} });
+    rm(root);
+});
+
+test('validateSourceInput: tolerates missing fields object', () => {
+    assert.match(validateSourceInput('local'), /path/);
+});
+
+test('buildSourceEntry: defaults label to empty when omitted', () => {
+    assert.deepEqual(buildSourceEntry('local', { path: '/x' }), { type: 'local', label: '', path: '/x' });
+});
+
+test('addSourceEntry/removeSourceEntry/writeSources: tolerate a doc without a sources map', () => {
+    assert.deepEqual(Object.keys(addSourceEntry({}, 'k', { type: 'local', label: 'L', path: '/x' }).sources), ['k']);
+    assert.deepEqual(removeSourceEntry({}, 'k').sources, {});
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpk-brand-'));
+    writeSources(root, {});
+    assert.deepEqual(readSourcesFile(root).sources, {});
+    rm(root);
 });
