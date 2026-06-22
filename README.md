@@ -16,6 +16,12 @@ The CLI tools (`setup`, `dev`, `clone`, `config`, `compress`) and template filte
 
 ## Getting Started
 
+The public npm package for campaign repo setup and local builds is
+`next-campaign-page-kit`. It provides the `campaign-init`, `campaign-build`,
+`campaign-dev`, and related project commands. `@nextcommerce/campaigns-os` is a
+separate workflow/orchestration toolkit and is not the package agency campaign
+repos install for page-kit builds.
+
 ### 1. Create a project directory
 
 ```bash
@@ -239,17 +245,26 @@ The command exits `1` when any page fails to render, and `0` otherwise. Build wa
 | Flag | Purpose |
 |---|---|
 | `--json` | Print the build summary as a JSON document on stdout instead of the human-readable log |
+| `--no-clean` | Preserve existing files in `_site/` before building |
+| `--verbose` | Print debug diagnostics to stderr |
+| `--help`, `-h` | Show build help |
+
+By default, `campaign-build` removes `_site/` before a full build. This keeps
+deleted source pages and assets from remaining in publish output. Use
+`--no-clean` only for repos that intentionally manage additional files inside
+`_site/`.
 
 #### JSON build summary (`--json`)
 
 `campaign-build --json` reports, for every page in the build, which source file was rendered, which URL it resolved to, and which output file it was written to — in a form that CI jobs and scripts can consume directly.
 
-In this mode, stdout carries exactly one JSON document and nothing else. Warnings, errors, and debug lines all go to stderr, so the summary can be piped or redirected without any filtering:
+In this mode, stdout carries exactly one JSON document and nothing else. Warnings and errors go to stderr. Debug lines are quiet by default and are printed to stderr only when `--verbose` is passed, so the summary can be piped or redirected without any filtering:
 
 ```bash
 npm run build -- --json                     # output build summary as json (the -- forwards the flag)
 npx campaign-build --json | jq '.pages'     # access .pages directly
 npx campaign-build --json > build-output.json   # output to file
+npx campaign-build --json --verbose > build-output.json   # JSON on stdout, debug on stderr
 ```
 
 A build of two pages, where `presell.html` is missing its `page_type` frontmatter, produces:

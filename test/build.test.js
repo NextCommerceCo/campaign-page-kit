@@ -810,6 +810,17 @@ test('build: renders page without layout when none exists', async () => {
 
 const BUILD_BIN = path.join(__dirname, '..', 'lib', 'actions', 'build.js');
 
+test('campaign-build --help: exits before loading project data', async () => {
+    await withTmpDir(async (dir) => {
+        const { stdout, stderr } = await execFileAsync(process.execPath, [BUILD_BIN, '--help'], { cwd: dir });
+
+        assert.match(stdout, /campaign-build/);
+        assert.match(stdout, /--json/);
+        assert.match(stdout, /--no-clean/);
+        assert.equal(stderr, '');
+    });
+});
+
 test('campaign-build --json: stdout is exactly the JSON summary', async () => {
     await withTmpDir(async (dir) => {
         writeFixture(dir, '_data/campaigns.json',
@@ -820,10 +831,11 @@ test('campaign-build --json: stdout is exactly the JSON summary', async () => {
         // a page with warnings, to prove they land in JSON not stdout noise
         writeFixture(dir, 'src/test-campaign/index.html', '---\n---\n<p>home</p>');
 
-        const { stdout } = await execFileAsync(process.execPath, [BUILD_BIN, '--json'], { cwd: dir });
+        const { stdout, stderr } = await execFileAsync(process.execPath, [BUILD_BIN, '--json'], { cwd: dir });
 
         // stdout must be a single parseable JSON document — no banner, no log lines
         const summary = JSON.parse(stdout);
+        assert.doesNotMatch(stderr, /DEBUG/);
         assert.equal(summary.built, 2);
         assert.equal(summary.errors, 0);
         assert.equal(summary.warnings, 2);
@@ -868,5 +880,38 @@ test('campaign-build (default): human summary on stdout, not JSON', async () => 
 
         assert.match(stdout, /Built 1 page/);
         assert.throws(() => JSON.parse(stdout));
+    });
+});
+
+test('campaign-build (default): cleans stale output before building', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+        writeFixture(dir, 'src/test-campaign/assets/old.txt', 'old');
+
+        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), true);
+
+        fs.rmSync(path.join(dir, 'src', 'test-campaign', 'assets', 'old.txt'));
+        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
+
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), false);
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
+    });
+});
+
+test('campaign-build --no-clean: preserves existing output files', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+        writeFixture(dir, '_site/keep.txt', 'manual');
+
+        await execFileAsync(process.execPath, [BUILD_BIN, '--no-clean'], { cwd: dir });
+
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'keep.txt')), true);
     });
 });
