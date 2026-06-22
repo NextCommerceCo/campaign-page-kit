@@ -8,9 +8,9 @@ const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 
-const { resolveOutput } = require('../lib/engine/build');
+const { build, cleanOutputPath, resolveOutput } = require('../lib/engine/build');
 const { createEngine, renderPage } = require('../lib/engine/render');
-const { build } = require('../lib/engine/build');
+const { parseFrontmatter } = require('../lib/frontmatter');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,6 +50,38 @@ test('resolveOutput: permalink frontmatter overrides path', () => {
     const { url, outputFile } = resolveOutput('my-campaign/anything.html', { permalink: '/custom/path/' }, '/out');
     assert.equal(url, '/custom/path/');
     assert.equal(outputFile, path.join('/out', 'custom', 'path', 'index.html'));
+});
+
+// ---------------------------------------------------------------------------
+// parseFrontmatter — gray-matter compatibility subset
+// ---------------------------------------------------------------------------
+
+test('parseFrontmatter: returns full content when there is no frontmatter fence', () => {
+    const parsed = parseFrontmatter('<p>plain body</p>');
+
+    assert.deepEqual(parsed.data, {});
+    assert.equal(parsed.content, '<p>plain body</p>');
+});
+
+test('parseFrontmatter: parses YAML data and returns body after closing fence newline', () => {
+    const parsed = parseFrontmatter('---\ntitle: Home\npage_type: product\n---\n<p>body</p>');
+
+    assert.deepEqual(parsed.data, { title: 'Home', page_type: 'product' });
+    assert.equal(parsed.content, '<p>body</p>');
+});
+
+test('parseFrontmatter: throws for an unclosed opening fence', () => {
+    assert.throws(
+        () => parseFrontmatter('---\ntitle: Home\n<p>body</p>'),
+        /frontmatter missing closing ---/
+    );
+});
+
+test('parseFrontmatter: throws when frontmatter is not a YAML object', () => {
+    assert.throws(
+        () => parseFrontmatter('---\n- title\n---\n<p>body</p>'),
+        /frontmatter must be a YAML object/
+    );
 });
 
 // ---------------------------------------------------------------------------
@@ -478,6 +510,32 @@ test('build: copies assets directory to output', async () => {
     });
 });
 
+test('cleanOutputPath: refuses cwd and paths outside cwd', async () => {
+    await withTmpDir(async (dir) => {
+        assert.throws(
+            () => cleanOutputPath(process.cwd()),
+            /Refusing to clean unsafe output path/
+        );
+        assert.throws(
+            () => cleanOutputPath(dir),
+            /Refusing to clean unsafe output path/
+        );
+    });
+});
+
+test('cleanOutputPath: removes only child paths under cwd', () => {
+    const outputPath = path.join(process.cwd(), `.tmp-clean-output-${process.pid}-${Date.now()}`);
+    fs.mkdirSync(outputPath, { recursive: true });
+    fs.writeFileSync(path.join(outputPath, 'old.txt'), 'old', 'utf8');
+
+    try {
+        cleanOutputPath(outputPath);
+        assert.equal(fs.existsSync(outputPath), false);
+    } finally {
+        fs.rmSync(outputPath, { recursive: true, force: true });
+    }
+});
+
 test('build: counts render errors for invalid templates', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
@@ -817,6 +875,7 @@ test('campaign-build --help: exits before loading project data', async () => {
         assert.match(stdout, /campaign-build/);
         assert.match(stdout, /--json/);
         assert.match(stdout, /--no-clean/);
+        assert.equal(stdout.endsWith('\n'), true);
         assert.equal(stderr, '');
     });
 });
@@ -866,6 +925,21 @@ test('campaign-build --json: exits 1 and still emits JSON when a page errors', a
                 return true;
             }
         );
+    });
+});
+
+test('campaign-build --json --verbose: keeps JSON on stdout and debug on stderr', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+
+        const { stdout, stderr } = await execFileAsync(process.execPath, [BUILD_BIN, '--json', '--verbose'], { cwd: dir });
+
+        const summary = JSON.parse(stdout);
+        assert.equal(summary.built, 1);
+        assert.match(stderr, /DEBUG/);
     });
 });
 
