@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 const { build, cleanOutputPath, resolveOutput } = require('../lib/engine/build');
 const { createEngine, renderPage } = require('../lib/engine/render');
 const { parseFrontmatter } = require('../lib/frontmatter');
+const logger = require('../lib/logger');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,6 +83,46 @@ test('parseFrontmatter: throws when frontmatter is not a YAML object', () => {
         () => parseFrontmatter('---\n- title\n---\n<p>body</p>'),
         /frontmatter must be a YAML object/
     );
+});
+
+test('parseFrontmatter: throws when YAML frontmatter resolves to null', () => {
+    assert.throws(
+        () => parseFrontmatter('---\nnull\n---\n<p>body</p>'),
+        /frontmatter must be a YAML object/
+    );
+});
+
+// ---------------------------------------------------------------------------
+// logger — debug compatibility
+// ---------------------------------------------------------------------------
+
+test('logger.debug: emits by default for existing call sites', () => {
+    const originalError = console.error;
+    const lines = [];
+    console.error = (line) => lines.push(line);
+
+    try {
+        logger.debug('legacy debug');
+    } finally {
+        console.error = originalError;
+    }
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /legacy debug/);
+});
+
+test('logger.debug: can be disabled per call', () => {
+    const originalError = console.error;
+    const lines = [];
+    console.error = (line) => lines.push(line);
+
+    try {
+        logger.debug('quiet debug', { enabled: false });
+    } finally {
+        console.error = originalError;
+    }
+
+    assert.deepEqual(lines, []);
 });
 
 // ---------------------------------------------------------------------------
