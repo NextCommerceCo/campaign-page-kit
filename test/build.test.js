@@ -10,7 +10,6 @@ const execFileAsync = promisify(execFile);
 
 const { build, resolveOutput } = require('../lib/engine/build');
 const { createEngine, renderPage } = require('../lib/engine/render');
-const { parseFrontmatter } = require('../lib/frontmatter');
 const logger = require('../lib/logger');
 
 // ---------------------------------------------------------------------------
@@ -51,45 +50,6 @@ test('resolveOutput: permalink frontmatter overrides path', () => {
     const { url, outputFile } = resolveOutput('my-campaign/anything.html', { permalink: '/custom/path/' }, '/out');
     assert.equal(url, '/custom/path/');
     assert.equal(outputFile, path.join('/out', 'custom', 'path', 'index.html'));
-});
-
-// ---------------------------------------------------------------------------
-// parseFrontmatter — gray-matter compatibility subset
-// ---------------------------------------------------------------------------
-
-test('parseFrontmatter: returns full content when there is no frontmatter fence', () => {
-    const parsed = parseFrontmatter('<p>plain body</p>');
-
-    assert.deepEqual(parsed.data, {});
-    assert.equal(parsed.content, '<p>plain body</p>');
-});
-
-test('parseFrontmatter: parses YAML data and returns body after closing fence newline', () => {
-    const parsed = parseFrontmatter('---\ntitle: Home\npage_type: product\n---\n<p>body</p>');
-
-    assert.deepEqual(parsed.data, { title: 'Home', page_type: 'product' });
-    assert.equal(parsed.content, '<p>body</p>');
-});
-
-test('parseFrontmatter: throws for an unclosed opening fence', () => {
-    assert.throws(
-        () => parseFrontmatter('---\ntitle: Home\n<p>body</p>'),
-        /frontmatter missing closing ---/
-    );
-});
-
-test('parseFrontmatter: throws when frontmatter is not a YAML object', () => {
-    assert.throws(
-        () => parseFrontmatter('---\n- title\n---\n<p>body</p>'),
-        /frontmatter must be a YAML object/
-    );
-});
-
-test('parseFrontmatter: throws when YAML frontmatter resolves to null', () => {
-    assert.throws(
-        () => parseFrontmatter('---\nnull\n---\n<p>body</p>'),
-        /frontmatter must be a YAML object/
-    );
 });
 
 // ---------------------------------------------------------------------------
@@ -968,20 +928,5 @@ test('campaign-build (default): human summary on stdout, not JSON', async () => 
 
         assert.match(stdout, /Built 1 page/);
         assert.throws(() => JSON.parse(stdout));
-    });
-});
-
-test('campaign-build (default): preserves existing output files', async () => {
-    await withTmpDir(async (dir) => {
-        writeFixture(dir, '_data/campaigns.json',
-            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
-        writeFixture(dir, 'src/test-campaign/index.html',
-            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
-        writeFixture(dir, '_site/keep.txt', 'manual');
-
-        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
-
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'keep.txt')), true);
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
     });
 });

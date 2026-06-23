@@ -246,9 +246,6 @@ The command exits `1` when any page fails to render, and `0` otherwise. Build wa
 | `--verbose` | Print debug diagnostics to stderr |
 | `--help`, `-h` | Show build help |
 
-`campaign-build` preserves existing files in `_site/` so repos can serve or
-manage additional campaign output there.
-
 #### JSON build summary (`--json`)
 
 `campaign-build --json` reports, for every page in the build, which source file was rendered, which URL it resolved to, and which output file it was written to — in a form that CI jobs and scripts can consume directly.
