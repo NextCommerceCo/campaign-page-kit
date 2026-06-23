@@ -577,6 +577,49 @@ test('cleanOutputPath: removes only child paths under cwd', () => {
     }
 });
 
+test('cleanOutputPath: refuses paths that overlap protected source paths', () => {
+    const root = path.join(process.cwd(), `.tmp-clean-protected-${process.pid}-${Date.now()}`);
+    const srcPath = path.join(root, 'src');
+    const outputInsideSrc = path.join(srcPath, '_site');
+    fs.mkdirSync(outputInsideSrc, { recursive: true });
+    fs.writeFileSync(path.join(srcPath, 'keep.html'), '<p>keep</p>', 'utf8');
+
+    try {
+        assert.throws(
+            () => cleanOutputPath(srcPath, { protectedPaths: [srcPath] }),
+            /Refusing to clean output path that overlaps source path/
+        );
+        assert.throws(
+            () => cleanOutputPath(outputInsideSrc, { protectedPaths: [srcPath] }),
+            /Refusing to clean output path that overlaps source path/
+        );
+        assert.equal(fs.existsSync(path.join(srcPath, 'keep.html')), true);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('build: clean refuses to delete the source tree when outputPath is misconfigured', async () => {
+    const root = path.join(process.cwd(), `.tmp-build-protected-${process.pid}-${Date.now()}`);
+    const srcPath = path.join(root, 'src');
+    try {
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+
+        await assert.rejects(
+            () => build({
+                srcPath,
+                outputPath: srcPath,
+                clean: true,
+                campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            }),
+            /Refusing to clean output path that overlaps source path/
+        );
+        assert.equal(fs.existsSync(path.join(srcPath, 'test-campaign', 'index.html')), true);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('build: counts render errors for invalid templates', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
