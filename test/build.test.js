@@ -8,7 +8,7 @@ const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 
-const { build, cleanOutputPath, resolveOutput } = require('../lib/engine/build');
+const { build, resolveOutput } = require('../lib/engine/build');
 const { createEngine, renderPage } = require('../lib/engine/render');
 const { parseFrontmatter } = require('../lib/frontmatter');
 const logger = require('../lib/logger');
@@ -551,75 +551,6 @@ test('build: copies assets directory to output', async () => {
     });
 });
 
-test('cleanOutputPath: refuses cwd and paths outside cwd', async () => {
-    await withTmpDir(async (dir) => {
-        assert.throws(
-            () => cleanOutputPath(process.cwd()),
-            /Refusing to clean unsafe output path/
-        );
-        assert.throws(
-            () => cleanOutputPath(dir),
-            /Refusing to clean unsafe output path/
-        );
-    });
-});
-
-test('cleanOutputPath: removes only child paths under cwd', () => {
-    const outputPath = path.join(process.cwd(), `.tmp-clean-output-${process.pid}-${Date.now()}`);
-    fs.mkdirSync(outputPath, { recursive: true });
-    fs.writeFileSync(path.join(outputPath, 'old.txt'), 'old', 'utf8');
-
-    try {
-        cleanOutputPath(outputPath);
-        assert.equal(fs.existsSync(outputPath), false);
-    } finally {
-        fs.rmSync(outputPath, { recursive: true, force: true });
-    }
-});
-
-test('cleanOutputPath: refuses paths that overlap protected source paths', () => {
-    const root = path.join(process.cwd(), `.tmp-clean-protected-${process.pid}-${Date.now()}`);
-    const srcPath = path.join(root, 'src');
-    const outputInsideSrc = path.join(srcPath, '_site');
-    fs.mkdirSync(outputInsideSrc, { recursive: true });
-    fs.writeFileSync(path.join(srcPath, 'keep.html'), '<p>keep</p>', 'utf8');
-
-    try {
-        assert.throws(
-            () => cleanOutputPath(srcPath, { protectedPaths: [srcPath] }),
-            /Refusing to clean output path that overlaps source path/
-        );
-        assert.throws(
-            () => cleanOutputPath(outputInsideSrc, { protectedPaths: [srcPath] }),
-            /Refusing to clean output path that overlaps source path/
-        );
-        assert.equal(fs.existsSync(path.join(srcPath, 'keep.html')), true);
-    } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('build: clean refuses to delete the source tree when outputPath is misconfigured', async () => {
-    const root = path.join(process.cwd(), `.tmp-build-protected-${process.pid}-${Date.now()}`);
-    const srcPath = path.join(root, 'src');
-    try {
-        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
-
-        await assert.rejects(
-            () => build({
-                srcPath,
-                outputPath: srcPath,
-                clean: true,
-                campaigns: { 'test-campaign': { name: 'Test Campaign' } },
-            }),
-            /Refusing to clean output path that overlaps source path/
-        );
-        assert.equal(fs.existsSync(path.join(srcPath, 'test-campaign', 'index.html')), true);
-    } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-    }
-});
-
 test('build: counts render errors for invalid templates', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
@@ -958,7 +889,6 @@ test('campaign-build --help: exits before loading project data', async () => {
 
         assert.match(stdout, /campaign-build/);
         assert.match(stdout, /--json/);
-        assert.match(stdout, /--clean/);
         assert.equal(stdout.endsWith('\n'), true);
         assert.equal(stderr, '');
     });
@@ -1052,25 +982,6 @@ test('campaign-build (default): preserves existing output files', async () => {
         await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
 
         assert.equal(fs.existsSync(path.join(dir, '_site', 'keep.txt')), true);
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
-    });
-});
-
-test('campaign-build --clean: removes stale output before building', async () => {
-    await withTmpDir(async (dir) => {
-        writeFixture(dir, '_data/campaigns.json',
-            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
-        writeFixture(dir, 'src/test-campaign/index.html',
-            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
-        writeFixture(dir, 'src/test-campaign/assets/old.txt', 'old');
-
-        await execFileAsync(process.execPath, [BUILD_BIN, '--clean'], { cwd: dir });
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), true);
-
-        fs.rmSync(path.join(dir, 'src', 'test-campaign', 'assets', 'old.txt'));
-        await execFileAsync(process.execPath, [BUILD_BIN, '--clean'], { cwd: dir });
-
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), false);
         assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
     });
 });

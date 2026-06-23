@@ -243,13 +243,11 @@ The command exits `1` when any page fails to render, and `0` otherwise. Build wa
 | Flag | Purpose |
 |---|---|
 | `--json` | Print the build summary as a JSON document on stdout instead of the human-readable log |
-| `--clean` | Remove `_site/` before a full build |
 | `--verbose` | Print debug diagnostics to stderr |
 | `--help`, `-h` | Show build help |
 
-By default, `campaign-build` preserves existing files in `_site/` so repos can
-serve or manage additional campaign output there. Use `--clean` only when
-`_site/` is fully owned by this build and stale output should be removed first.
+`campaign-build` preserves existing files in `_site/` so repos can serve or
+manage additional campaign output there.
 
 #### JSON build summary (`--json`)
 
