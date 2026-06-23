@@ -958,7 +958,7 @@ test('campaign-build --help: exits before loading project data', async () => {
 
         assert.match(stdout, /campaign-build/);
         assert.match(stdout, /--json/);
-        assert.match(stdout, /--no-clean/);
+        assert.match(stdout, /--clean/);
         assert.equal(stdout.endsWith('\n'), true);
         assert.equal(stderr, '');
     });
@@ -1041,26 +1041,7 @@ test('campaign-build (default): human summary on stdout, not JSON', async () => 
     });
 });
 
-test('campaign-build (default): cleans stale output before building', async () => {
-    await withTmpDir(async (dir) => {
-        writeFixture(dir, '_data/campaigns.json',
-            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
-        writeFixture(dir, 'src/test-campaign/index.html',
-            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
-        writeFixture(dir, 'src/test-campaign/assets/old.txt', 'old');
-
-        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), true);
-
-        fs.rmSync(path.join(dir, 'src', 'test-campaign', 'assets', 'old.txt'));
-        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
-
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), false);
-        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
-    });
-});
-
-test('campaign-build --no-clean: preserves existing output files', async () => {
+test('campaign-build (default): preserves existing output files', async () => {
     await withTmpDir(async (dir) => {
         writeFixture(dir, '_data/campaigns.json',
             JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
@@ -1068,8 +1049,28 @@ test('campaign-build --no-clean: preserves existing output files', async () => {
             '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
         writeFixture(dir, '_site/keep.txt', 'manual');
 
-        await execFileAsync(process.execPath, [BUILD_BIN, '--no-clean'], { cwd: dir });
+        await execFileAsync(process.execPath, [BUILD_BIN], { cwd: dir });
 
         assert.equal(fs.existsSync(path.join(dir, '_site', 'keep.txt')), true);
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
+    });
+});
+
+test('campaign-build --clean: removes stale output before building', async () => {
+    await withTmpDir(async (dir) => {
+        writeFixture(dir, '_data/campaigns.json',
+            JSON.stringify({ 'test-campaign': { name: 'Test Campaign' } }));
+        writeFixture(dir, 'src/test-campaign/index.html',
+            '---\ntitle: Home\npage_type: product\n---\n<p>ok</p>');
+        writeFixture(dir, 'src/test-campaign/assets/old.txt', 'old');
+
+        await execFileAsync(process.execPath, [BUILD_BIN, '--clean'], { cwd: dir });
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), true);
+
+        fs.rmSync(path.join(dir, 'src', 'test-campaign', 'assets', 'old.txt'));
+        await execFileAsync(process.execPath, [BUILD_BIN, '--clean'], { cwd: dir });
+
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'old.txt')), false);
+        assert.equal(fs.existsSync(path.join(dir, '_site', 'test-campaign', 'index.html')), true);
     });
 });

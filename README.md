@@ -18,9 +18,7 @@ The CLI tools (`setup`, `dev`, `clone`, `config`, `compress`) and template filte
 
 The public npm package for campaign repo setup and local builds is
 `next-campaign-page-kit`. It provides the `campaign-init`, `campaign-build`,
-`campaign-dev`, and related project commands. `@nextcommerce/campaigns-os` is a
-separate workflow/orchestration toolkit and is not the package agency campaign
-repos install for page-kit builds.
+`campaign-dev`, and related project commands.
 
 ### 1. Create a project directory
 
@@ -245,14 +243,13 @@ The command exits `1` when any page fails to render, and `0` otherwise. Build wa
 | Flag | Purpose |
 |---|---|
 | `--json` | Print the build summary as a JSON document on stdout instead of the human-readable log |
-| `--no-clean` | Preserve existing files in `_site/` before building |
+| `--clean` | Remove `_site/` before a full build |
 | `--verbose` | Print debug diagnostics to stderr |
 | `--help`, `-h` | Show build help |
 
-By default, `campaign-build` removes `_site/` before a full build. This keeps
-deleted source pages and assets from remaining in publish output. Use
-`--no-clean` only for repos that intentionally manage additional files inside
-`_site/`.
+By default, `campaign-build` preserves existing files in `_site/` so repos can
+serve or manage additional campaign output there. Use `--clean` only when
+`_site/` is fully owned by this build and stale output should be removed first.
 
 #### JSON build summary (`--json`)
 
