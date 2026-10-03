@@ -843,6 +843,23 @@ test('build: a full build removes output whose source is gone; a partial build l
     });
 });
 
+test('build: an assets/ file under an unknown slug is still reported, not dropped', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+        writeFixture(srcPath, 'unknown-campaign/assets/page.html', VALID_PAGE);
+
+        const summary = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+        });
+
+        assert.equal(summary.pages.length, 1);
+        assert.equal(summary.pages[0].status, 'skipped');
+        assert.ok(warningCodes(summary.pages[0]).includes('NO_CAMPAIGN'));
+    });
+});
+
 test('build: renders page without layout when none exists', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');

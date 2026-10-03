@@ -236,7 +236,7 @@ npm run build
 
 The command exits `1` when any page fails to render, and `0` otherwise. Build warnings (documented below) never change the exit code.
 
-A build empties `_site/<slug>/` for each campaign before writing it, so a page whose source file was removed or renamed is no longer served. Directories under `_site/` that belong to no campaign are left alone. The dev server's rebuild after a single file change does not empty anything.
+After writing a campaign, a build removes every other file under `_site/<slug>/`, so a page whose source file was removed or renamed is no longer served. Removal runs after the writes, so an interrupted build leaves the previous output in place. Directories under `_site/` that belong to no campaign are left alone. The dev server's rebuild after a single file change does not empty anything.
 
 Files under `src/<slug>/assets/` are assets, not pages: they are copied to `_site/<slug>/` as they are and never rendered, whatever their extension. An `.html` file there is still served at its copied path, so the build reports it as `ASSET_HTML` (see below).
 
