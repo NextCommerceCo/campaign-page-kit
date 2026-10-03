@@ -785,6 +785,64 @@ test('build: warns DUPLICATE_OUTPUT when two inputs resolve to the same output f
     });
 });
 
+test('build: an HTML file under assets/ is not rendered as a page and does not overwrite one', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>landing</p>');
+        // A design export kept under assets/ — its index.html used to build to
+        // /test-campaign/ and overwrite the landing page.
+        writeFixture(srcPath, 'test-campaign/assets/design/index.html', '<p>design export</p>');
+
+        const summary = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+        });
+
+        assert.deepEqual(summary.pages.map(p => p.inputFile.split(path.sep).slice(-2).join('/')), ['test-campaign/index.html']);
+        assert.equal(fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8'), '<p>landing</p>');
+
+        // Still copied as an asset, and named as a page the copy serves.
+        assert.equal(fs.readFileSync(path.join(outputPath, 'test-campaign', 'design', 'index.html'), 'utf8'), '<p>design export</p>');
+        assert.deepEqual(summary.assetWarnings.map(w => w.code), ['ASSET_HTML']);
+        assert.ok(summary.assetWarnings[0].outputFile.endsWith(path.join('_site', 'test-campaign', 'design', 'index.html')));
+        assert.equal(summary.warnings, 1);
+
+        // An explicit file list (the dev server's partial rebuild) skips it too.
+        const partial = await build({
+            srcPath, outputPath,
+            campaigns: { 'test-campaign': { name: 'Test Campaign' } },
+            files: ['test-campaign/assets/design/index.html'],
+        });
+        assert.equal(partial.pages.length, 0);
+        assert.equal(fs.readFileSync(path.join(outputPath, 'test-campaign', 'index.html'), 'utf8'), '<p>landing</p>');
+    });
+});
+
+test('build: a full build removes output whose source is gone; a partial build leaves it', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+        const campaigns = { 'test-campaign': { name: 'Test Campaign' } };
+
+        writeFixture(srcPath, 'test-campaign/index.html', VALID_PAGE);
+        writeFixture(srcPath, 'test-campaign/old.html', VALID_PAGE);
+        writeFixture(outputPath, 'other-site/keep.html', 'not a campaign');
+        await build({ srcPath, outputPath, campaigns });
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'old', 'index.html')));
+
+        fs.rmSync(path.join(srcPath, 'test-campaign', 'old.html'));
+        await build({ srcPath, outputPath, campaigns, files: ['test-campaign/index.html'] });
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'old', 'index.html')), 'a partial rebuild does not prune');
+
+        await build({ srcPath, outputPath, campaigns });
+        assert.ok(!fs.existsSync(path.join(outputPath, 'test-campaign', 'old')), 'the removed page is no longer served');
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'index.html')));
+        assert.ok(fs.existsSync(path.join(outputPath, 'other-site', 'keep.html')), 'only the built campaign directories are emptied');
+    });
+});
+
 test('build: renders page without layout when none exists', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');

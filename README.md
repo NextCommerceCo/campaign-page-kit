@@ -236,6 +236,10 @@ npm run build
 
 The command exits `1` when any page fails to render, and `0` otherwise. Build warnings (documented below) never change the exit code.
 
+A build empties `_site/<slug>/` for each campaign before writing it, so a page whose source file was removed or renamed is no longer served. Directories under `_site/` that belong to no campaign are left alone. The dev server's rebuild after a single file change does not empty anything.
+
+Files under `src/<slug>/assets/` are assets, not pages: they are copied to `_site/<slug>/` as they are and never rendered, whatever their extension. An `.html` file there is still served at its copied path, so the build reports it as `ASSET_HTML` (see below).
+
 | Flag | Purpose |
 |---|---|
 | `--json` | Print the build summary as a JSON document on stdout instead of the human-readable log |
@@ -291,7 +295,8 @@ Top-level fields:
 | Field | Description |
 |-------|-------------|
 | `built`, `errors`, `skipped` | Page counts by outcome. Every page appears in `pages` with the matching `status`, so these always sum to `pages.length` |
-| `warnings` | Total number of warning entries across all pages |
+| `warnings` | Total number of warning entries across all pages, plus `assetWarnings` |
+| `assetWarnings` | Asset files the copy serves as pages, each `{ code, file, outputFile, message }`. Today only `ASSET_HTML` |
 | `ms` | Build duration in milliseconds |
 
 Per-page fields:
@@ -320,6 +325,7 @@ A build can succeed and still be wrong: a misplaced file builds to a different U
 | `MISSING_FRONTMATTER` | The page is missing `title` or `page_type` in its frontmatter — both are required (see [Page Frontmatter](#page-frontmatter)) |
 | `INVALID_PAGE_TYPE` | `page_type` is not one of `product`, `checkout`, `upsell`, `receipt` |
 | `NO_CAMPAIGN` | The page's slug has no entry in `_data/campaigns.json`, so it was not built (`status` is `skipped`) |
+| `ASSET_HTML` | An `.html` file under `src/<slug>/assets/` was copied unrendered and is served at its path, for example `assets/design/index.html` at `/<slug>/design/`. Usually a design export kept for reference; move it out of `src/` unless it is meant to be served. Reported under `assetWarnings`, not on a page |
 
 ### Clone Campaign
 
