@@ -478,6 +478,69 @@ test('build: copies assets directory to output', async () => {
     });
 });
 
+test('build: an HTML file under assets/ is not built, not copied, and reported', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+        const out = (rel) => path.join(outputPath, 'test-campaign', rel);
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>landing</p>');
+        writeFixture(srcPath, 'test-campaign/assets/index.html', '<p>mockup</p>');
+        writeFixture(srcPath, 'test-campaign/assets/design/index.html', '<p>mockup</p>');
+        writeFixture(srcPath, 'test-campaign/assets/design/mockup.html', '<p>mockup</p>');
+        writeFixture(srcPath, 'test-campaign/assets/design/style.css', 'body { margin: 0; }');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } } });
+
+        assert.equal(summary.pages.length, 1);
+        assert.equal(fs.readFileSync(out('index.html'), 'utf8'), '<p>landing</p>');
+        assert.ok(!fs.existsSync(out('design/index.html')));
+        assert.ok(!fs.existsSync(out('design/mockup.html')));
+        assert.ok(!fs.existsSync(out('mockup/index.html')));
+        assert.ok(fs.existsSync(out('design/style.css')));
+
+        assert.deepEqual(summary.assetWarnings.map(w => w.code), ['ASSET_IGNORED', 'ASSET_IGNORED', 'ASSET_IGNORED']);
+        assert.ok(summary.assetWarnings.some(w => w.file.endsWith(path.join('assets', 'design', 'mockup.html'))));
+        assert.equal(summary.warnings, 3);
+    });
+});
+
+test('build: assetWarnings is empty when nothing under assets/ is ignored', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>landing</p>');
+
+        const summary = await build({ srcPath, outputPath, campaigns: { 'test-campaign': { name: 'Test Campaign' } }, files: [] });
+
+        assert.equal(summary.pages.length, 0);
+        assert.deepEqual(summary.assetWarnings, []);
+        assert.equal(summary.warnings, 0);
+    });
+});
+
+test('build: clean deletes each campaign output directory before building', async () => {
+    await withTmpDir(async (dir) => {
+        const srcPath = path.join(dir, 'src');
+        const outputPath = path.join(dir, '_site');
+        const campaigns = { 'test-campaign': { name: 'Test Campaign' }, '..': { name: 'Bad slug' } };
+
+        writeFixture(srcPath, 'test-campaign/index.html', '---\ntitle: Home\npage_type: product\n---\n<p>landing</p>');
+        writeFixture(outputPath, 'test-campaign/old/index.html', 'stale');
+        writeFixture(outputPath, 'preview/index.html', 'not a campaign');
+
+        await build({ srcPath, outputPath, campaigns });
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'old', 'index.html')));
+
+        await build({ srcPath, outputPath, campaigns, clean: true });
+        assert.ok(!fs.existsSync(path.join(outputPath, 'test-campaign', 'old')));
+        assert.ok(fs.existsSync(path.join(outputPath, 'test-campaign', 'index.html')));
+        assert.ok(fs.existsSync(path.join(outputPath, 'preview', 'index.html')));
+        assert.ok(fs.existsSync(srcPath));
+    });
+});
+
 test('build: counts render errors for invalid templates', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');

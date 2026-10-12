@@ -197,6 +197,8 @@ This will:
 
 By default the dev server starts on port `3000` and prompts you to pick a campaign.
 
+The first build of a dev session deletes `_site/<slug>/` for every campaign, the same as `npm run build`. Rebuilds triggered by a file change do not delete anything.
+
 | Flag | Purpose |
 |---|---|
 | `--campaign <slug>`, `-c <slug>` | Skip the picker and start this campaign (must exist in `_data/campaigns.json`) |
@@ -235,6 +237,8 @@ npm run build
 ```
 
 The command exits `1` when any page fails to render, and `0` otherwise. Build warnings (documented below) never change the exit code.
+
+Each build first deletes `_site/<slug>/` for every campaign, so a page whose source file was removed or renamed is no longer served. Other directories under `_site/` are left alone.
 
 | Flag | Purpose |
 |---|---|
@@ -291,7 +295,8 @@ Top-level fields:
 | Field | Description |
 |-------|-------------|
 | `built`, `errors`, `skipped` | Page counts by outcome. Every page appears in `pages` with the matching `status`, so these always sum to `pages.length` |
-| `warnings` | Total number of warning entries across all pages |
+| `warnings` | Total number of warning entries across all pages, plus `assetWarnings` |
+| `assetWarnings` | Files under `assets/` that were not copied, each `{ code, file, message }` |
 | `ms` | Build duration in milliseconds |
 
 Per-page fields:
@@ -320,6 +325,8 @@ A build can succeed and still be wrong: a misplaced file builds to a different U
 | `MISSING_FRONTMATTER` | The page is missing `title` or `page_type` in its frontmatter — both are required (see [Page Frontmatter](#page-frontmatter)) |
 | `INVALID_PAGE_TYPE` | `page_type` is not one of `product`, `checkout`, `upsell`, `receipt` |
 | `NO_CAMPAIGN` | The page's slug has no entry in `_data/campaigns.json`, so it was not built (`status` is `skipped`) |
+
+One warning is not attached to a page. `ASSET_IGNORED` means an `.html` file under `src/<slug>/assets/` was not built or copied. It is listed under `assetWarnings` in the JSON summary. Move a page into the campaign directory, or a fragment into `_includes/`.
 
 ### Clone Campaign
 
@@ -358,6 +365,7 @@ your-project/
 - **`_data/campaigns.json`** - Register all campaigns and their configuration data here. Uses a key-based format where each key is the campaign slug (see below). If you have an older project using the array format, run `npm run migrate` to convert it.
 - **`src/[campaign]/_layouts/base.html`** - Campaign's base layout
 - **`src/[campaign]/assets/config.js`** - Campaign Cart SDK configuration
+- **`src/[campaign]/assets/`** - Copied as-is to `_site/[campaign]/`. `.html` files in this directory are not built as pages and not copied. Put pages in the campaign directory and reusable HTML in `_includes/`.
 
 ## Page Frontmatter
 
