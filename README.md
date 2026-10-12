@@ -197,7 +197,7 @@ This will:
 
 By default the dev server starts on port `3000` and prompts you to pick a campaign.
 
-The first build of a dev session deletes `_site/<slug>/` for every campaign, the same as `npm run build`. Rebuilds triggered by a file change do not delete anything.
+The first build of a dev session cleans `_site/<slug>/` for every campaign, the same as `npm run build`. Rebuilds triggered by a file change do not clean anything.
 
 | Flag | Purpose |
 |---|---|
@@ -238,7 +238,7 @@ npm run build
 
 The command exits `1` when any page fails to render, and `0` otherwise. Build warnings (documented below) never change the exit code.
 
-Each build first deletes `_site/<slug>/` for every campaign, so a page whose source file was removed or renamed is no longer served. Other directories under `_site/` are left alone.
+Each build first cleans `_site/<slug>/` for every campaign, so a page whose source file was removed or renamed is no longer served. Other directories under `_site/` are left alone.
 
 | Flag | Purpose |
 |---|---|

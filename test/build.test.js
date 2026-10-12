@@ -520,7 +520,7 @@ test('build: assetWarnings is empty when nothing under assets/ is ignored', asyn
     });
 });
 
-test('build: clean deletes each campaign output directory before building', async () => {
+test('build: clean empties each campaign output directory before building', async () => {
     await withTmpDir(async (dir) => {
         const srcPath = path.join(dir, 'src');
         const outputPath = path.join(dir, '_site');
