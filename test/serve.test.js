@@ -192,22 +192,24 @@ test('handleChange does not reload when rebuild returns false', async () => {
     await new Promise((r) => server.once('listening', r));
     const port = server.address().port;
 
-    const body = await new Promise((resolve, reject) => {
-        http.get(`http://localhost:${port}/_lr`, (res) => {
-            let received = '';
-            res.on('data', (chunk) => {
-                received += chunk;
-                if (received.includes(': connected') && !received.includes('data:')) {
-                    watcher.emit('change', '/fake/src/test.html');
-                    setTimeout(() => { res.destroy(); resolve(received); }, 100);
-                }
-            });
-        }).on('error', reject);
-    });
+    try {
+        const body = await new Promise((resolve, reject) => {
+            http.get(`http://localhost:${port}/_lr`, (res) => {
+                let received = '';
+                res.on('data', (chunk) => {
+                    received += chunk;
+                    if (received.includes(': connected') && !received.includes('data:')) {
+                        watcher.emit('change', '/fake/src/test.html');
+                        setTimeout(() => { res.destroy(); resolve(received); }, 100);
+                    }
+                });
+            }).on('error', reject);
+        });
 
-    assert.doesNotMatch(body, /data: reload/);
-
-    await cleanup(server, watcher, [outputPath, srcPath]);
+        assert.doesNotMatch(body, /data: reload/);
+    } finally {
+        await cleanup(server, watcher, [outputPath, srcPath]);
+    }
 });
 
 test('handleChange logs error when rebuild throws', async () => {
