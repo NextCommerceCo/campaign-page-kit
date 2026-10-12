@@ -413,6 +413,21 @@ test('validateEntryUrl: strips query string before matching the source page', ()
     finally { cleanup(); }
 });
 
+test('validateEntryUrl: returns error when target is an HTML file under assets/', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/assets/index.html']);
+    try {
+        const err = validateEntryUrl(srcPath, 'my-campaign', 'assets/index');
+        assert.match(err, /entry_url "assets\/index"/);
+        assert.match(err, /not built or copied/);
+    } finally { cleanup(); }
+});
+
+test('validateEntryUrl: returns null for a root page named assets.html', () => {
+    const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/assets.html']);
+    try { assert.equal(validateEntryUrl(srcPath, 'my-campaign', 'assets'), null); }
+    finally { cleanup(); }
+});
+
 test('validateEntryUrl: returns error when target page is missing', () => {
     const { srcPath, cleanup } = makeFixtureSrc(['my-campaign/presell.html']);
     try {
