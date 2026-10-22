@@ -573,7 +573,7 @@ Includes a file relative to the current campaign's `_includes` directory. This i
 
 ## Connecting to Campaigns App
 
-To connect this campaign to your 29 Next Campaigns App:
+To connect this campaign to your Next Commerce Campaigns App:
 
 1. Run `npm run config`
 2. Select your campaign
