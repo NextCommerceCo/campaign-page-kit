@@ -97,9 +97,11 @@ npx campaign-init --json \
 
 #### Preview before connecting commerce
 
-Without `--api-key`, init records `preview_mode: true` in the campaign's `_data/campaigns.json` entry. Both development and production builds then produce a labeled **static preview**: no SDK or other JavaScript runs, forms and external links are disabled, and a Content Security Policy blocks connections, embedded pages and external assets, including tracking pixels. Local CSS, images, fonts and page navigation still work. External images/fonts and interactive components will be absent or inactive; this preview does not prove checkout or payment behavior.
+Without `--api-key`, init records `preview_mode: true` in the campaign's `_data/campaigns.json` entry. Both development and production builds then produce a labeled **static preview**: no SDK or other JavaScript runs, forms and external links are disabled, and a Content Security Policy blocks connections, embedded pages and external assets, including tracking pixels. Local CSS, images and fonts still work. Navigation is limited to successfully rendered pages in the same preview campaign and local fragments. External images/fonts and interactive components will be absent or inactive; this preview does not prove checkout or payment behavior.
 
 Init JSON reports `campaign.runtime_mode: "unconfigured-preview"`, and each built page reports `UNCONFIGURED_PREVIEW`. The inherited commerce key is cleared in `assets/config.js`; a marked override disables analytics while preserving the rest of the template configuration.
+
+Automatic key configuration supports one static `window.nextConfig = { ... }` assignment with a single `apiKey` string. Dynamic or ambiguous configuration is rejected without changing the runtime or preview gate; review and simplify that configuration before retrying.
 
 To connect later, run `npm run config` and enter the intended Campaign API key. Only after writing the key successfully does this remove `preview_mode` and its analytics override. Rebuild to enable the normal template runtime. If configuring by hand, set the intended key, remove the marked preview override in `assets/config.js`, and remove `preview_mode` from the registry only when ready to enable scripts and tracking.
 
