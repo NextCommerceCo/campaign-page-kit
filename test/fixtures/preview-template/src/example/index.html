@@ -1,0 +1,23 @@
+---
+title: Example checkout
+page_type: checkout
+---
+<!doctype html>
+<html><head>
+<title>{{ title }}</title>
+<link rel="preconnect" href="https://commerce.invalid">
+<link rel="dns-prefetch" href="//vendor.invalid">
+<link rel="prefetch" href="https://commerce.invalid/next">
+<link rel="stylesheet" href="{{ 'style.css' | campaign_asset }}">
+<script src="{{ 'config.js' | campaign_asset }}"></script>
+<script src="https://commerce.invalid/sdk.js"></script>
+<script>window.previewScriptRan = true; fetch('https://commerce.invalid/cart'); navigator.sendBeacon('https://vendor.invalid/event', 'test');</script>
+</head><body onload="fetch('https://vendor.invalid/onload')">
+<h1>Example checkout</h1>
+<img src="{{ 'local.svg' | campaign_asset }}" alt="Local fixture">
+<img src="https://vendor.invalid/pixel.gif" alt="Remote fixture">
+<iframe src="https://commerce.invalid/payment"></iframe>
+<form method="post" action="https://commerce.invalid/order"><input name="email"><button>Place order</button></form>
+<a href="https://vendor.invalid/leave" ping="https://vendor.invalid/ping">External link</a>
+<a href="{{ 'thank-you.html' | campaign_link }}">Local navigation</a>
+</body></html>

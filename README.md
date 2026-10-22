@@ -43,7 +43,7 @@ npx campaign-init
 4. Asks for your **Campaign name** (display name) and **Campaign slug** (directory + URL path, e.g. `/my-campaign/`)
 5. Downloads only the chosen template's `src/<slug>/` files into your project
 6. Merges the template's registry data into your local `_data/campaigns.json` under your chosen slug
-7. Optionally prompts for your Campaign API key and writes it to `assets/config.js`
+7. Optionally prompts for your Campaign API key and writes it to `assets/config.js`. Skipping the key creates an unconfigured static preview, with the template's demo key cleared and analytics disabled.
 8. Optionally offers to set up **AI context** for your editor or agent — installs the upstream context doc to the right location for your tool:
    - **Claude Code** → `CLAUDE.md` at the project root
    - **OpenAI Codex** → `AGENTS.md` at the project root
@@ -84,6 +84,7 @@ npx campaign-init --json \
 | `--slug <name>` | Local campaign slug (folder under `src/`, also URL path) |
 | `--name <"display">` | Display name (defaults to upstream template name) |
 | `--api-key <key>` | Campaign Cart API key, written to `assets/config.js` |
+| `--demo` | Explicitly retain the template's demo key, scripts and tracking; cannot be combined with `--api-key` |
 | `--non-interactive` | Never prompt; missing required input → exit 5 |
 | `--json` | Machine-readable stdout; suppresses all human UI |
 | `--dry-run` | Resolve plan; no downloads, no writes |
@@ -93,6 +94,16 @@ npx campaign-init --json \
 | `--help`, `-h` | Show full help |
 
 **Exit codes:** `0` ok · `2` template not found · `3` target conflict (use `--overwrite`) · `4` upstream fetch failed · `5` missing required input · `6` invalid input · `7` partial write rolled back · `8` rollback failed.
+
+#### Preview before connecting commerce
+
+Without `--api-key`, init records `preview_mode: true` in the campaign's `_data/campaigns.json` entry. Both development and production builds then produce a labeled **static preview**: no SDK or other JavaScript runs, forms and external links are disabled, and a Content Security Policy blocks connections, embedded pages and external assets, including tracking pixels. Local CSS, images, fonts and page navigation still work. External images/fonts and interactive components will be absent or inactive; this preview does not prove checkout or payment behavior.
+
+Init JSON reports `campaign.runtime_mode: "unconfigured-preview"`, and each built page reports `UNCONFIGURED_PREVIEW`. The inherited commerce key is cleared in `assets/config.js`; a marked override disables analytics while preserving the rest of the template configuration.
+
+To connect later, run `npm run config` and enter the intended Campaign API key. Only after writing the key successfully does this remove `preview_mode` and its analytics override. Rebuild to enable the normal template runtime. If configuring by hand, set the intended key, remove the marked preview override in `assets/config.js`, and remove `preview_mode` from the registry only when ready to enable scripts and tracking.
+
+For a deliberately connected template demo, pass `--demo` to init. This preserves the template's original configuration and can call its commerce and analytics services. Existing campaigns without `preview_mode` retain their previous build behavior. Preview protection applies to Page Kit output; opening raw source files or using a different build tool does not apply this policy.
 
 `--ai-context` writes the upstream context doc verbatim (with a sentinel header) to wherever the chosen tool auto-loads it: `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/campaign-page-kit.mdc`, or `.github/copilot-instructions.md`.
 
