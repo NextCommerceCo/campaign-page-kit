@@ -174,6 +174,19 @@ test('applyApiKey: returns null when no apiKey field is present', () => {
     assert.equal(applyApiKey('module.exports = { other: true };', 'k'), null);
 });
 
+test('applyApiKey: targets the shallowest apiKey, not the first one in the file', () => {
+    const source = "window.nextConfig = {\n  googleMaps: { apiKey: 'MAPS' },\n  apiKey: 'DEMO',\n  other: { nested: { apiKey: \"DEEP\" } }\n};";
+    const out = applyApiKey(source, '');
+    assert.match(out, /googleMaps: \{ apiKey: 'MAPS' \}/);
+    assert.match(out, /\n  apiKey: ''/);
+    assert.match(out, /apiKey: "DEEP"/);
+});
+
+test('applyApiKey: returns null for a dynamic binding and keeps the source when the value is unchanged', () => {
+    assert.equal(applyApiKey('window.nextConfig = { apiKey: process.env.KEY };', 'k'), null);
+    assert.equal(applyApiKey("window.nextConfig = { apiKey: '' };", ''), "window.nextConfig = { apiKey: '' };");
+});
+
 // ---------------------------------------------------------------------------
 // extractTemplate (integration: real fixture tarball via system `tar`)
 // ---------------------------------------------------------------------------
