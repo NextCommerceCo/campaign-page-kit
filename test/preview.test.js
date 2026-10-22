@@ -93,6 +93,46 @@ test('existing campaigns without the preview marker render unchanged', async t =
     assert.doesNotMatch(html, /data-cpk-preview/);
 });
 
+test('malformed preview markers fail closed while explicit boolean false retains normal output', async t => {
+    const p = project(t, ['--demo']);
+    for (const marker of ['true', 1, 'false', 0, null, '', {}, []]) {
+        const campaigns = readCampaigns(p);
+        campaigns.preview.preview_mode = marker;
+        fs.writeFileSync(p.campaignsPath, JSON.stringify(campaigns));
+        const { html, summary } = await builtHtml(p);
+        assert.match(html, /data-cpk-preview/, `marker ${JSON.stringify(marker)} must stay static`);
+        assert.doesNotMatch(html, /<script|<iframe|onload=/);
+        assert.ok(summary.pages.every(page => page.warnings.some(w => w.code === 'INVALID_PREVIEW_MODE')));
+    }
+    const campaigns = readCampaigns(p);
+    campaigns.preview.preview_mode = false;
+    fs.writeFileSync(p.campaignsPath, JSON.stringify(campaigns));
+    const { html, summary } = await builtHtml(p);
+    assert.match(html, /window.previewScriptRan/);
+    assert.doesNotMatch(html, /data-cpk-preview/);
+    assert.ok(summary.pages.every(page => !page.warnings.some(w => w.code === 'INVALID_PREVIEW_MODE')));
+});
+
+test('preview disables controls without duplicating existing disabled attributes', () => {
+    const html = makeStaticPreview('<input disabled="disabled"><button disabled aria-disabled="true">Disabled</button><select disabled><option>One</option></select><textarea aria-disabled="true"></textarea>');
+    const controls = html.match(/<(?:input|button|select|textarea)\b[^>]*>/g);
+    assert.equal(controls.length, 4);
+    for (const control of controls) {
+        assert.equal((control.match(/\sdisabled(?:[=\s>])/g) || []).length, 1, control);
+    }
+});
+
+test('preview preserves authored CSP policies alongside its first restrictive policy', () => {
+    const restrictive = "img-src 'none'; style-src 'none'";
+    const permissive = "script-src 'unsafe-inline'; connect-src *";
+    const html = makeStaticPreview(`<head><meta http-equiv="Content-Security-Policy" content="${restrictive}"><meta http-equiv="content-security-policy" content="${permissive}"></head><body><img src="local.png"></body>`);
+    const head = parse(html).childNodes.find(n => n.tagName === 'html').childNodes.find(n => n.tagName === 'head');
+    const policies = head.childNodes.filter(node => node.tagName === 'meta' && node.attrs.some(a => a.name === 'http-equiv' && a.value.toLowerCase() === 'content-security-policy'));
+    assert.equal(head.childNodes[0], policies[0]);
+    assert.deepEqual(policies.map(node => node.attrs.find(a => a.name === 'content').value), [PREVIEW_POLICY, restrictive, permissive]);
+    assert.doesNotMatch(PREVIEW_POLICY, /frame-ancestors|sandbox/);
+});
+
 test('preview handles fragments, refresh, event handlers and nested templates', () => {
     const html = makeStaticPreview('<meta http-equiv="refresh" content="0; url=https://vendor.invalid"><template><script>fetch("https://vendor.invalid")</script></template><img src="local.png" onerror="fetch(1)"><a href="javascript:fetch(1)">Link</a>');
     assert.match(html, /<head><meta http-equiv="Content-Security-Policy"/);
