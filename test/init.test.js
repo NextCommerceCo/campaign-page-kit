@@ -156,22 +156,28 @@ test('mergeScripts: does not mutate the input', () => {
 // ---------------------------------------------------------------------------
 
 test('applyApiKey: replaces a single-quoted apiKey field', () => {
-    const out = applyApiKey("module.exports = { apiKey: '' };", 'abc');
+    const out = applyApiKey("window.nextConfig = { apiKey: '' };", 'abc');
     assert.match(out, /apiKey: 'abc'/);
 });
 
 test('applyApiKey: replaces a double-quoted apiKey field', () => {
-    const out = applyApiKey('module.exports = { apiKey: "old" };', 'new');
+    const out = applyApiKey('window.nextConfig = { apiKey: "old" };', 'new');
     assert.match(out, /apiKey: 'new'/);
 });
 
 test('applyApiKey: trims whitespace from the key', () => {
-    const out = applyApiKey("apiKey: ''", '  spaced  ');
+    const out = applyApiKey("window.nextConfig = { apiKey: '' };", '  spaced  ');
     assert.match(out, /apiKey: 'spaced'/);
 });
 
 test('applyApiKey: returns null when no apiKey field is present', () => {
     assert.equal(applyApiKey('module.exports = { other: true };', 'k'), null);
+});
+
+test('applyApiKey: rejects fragments and non-browser bindings', () => {
+    for (const source of ["apiKey: ''", "module.exports = { apiKey: 'DECOY' };", "// apiKey: 'DECOY'"]) {
+        assert.equal(applyApiKey(source, 'k'), null);
+    }
 });
 
 // ---------------------------------------------------------------------------

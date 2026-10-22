@@ -31,6 +31,7 @@
   "type": "commonjs",
   "dependencies": {
     "@clack/prompts": "^1.0.1",
+    "acorn": "^8.19.0",
     "chokidar": "^3.6.0",
     "fast-glob": "^3.3.0",
     "gray-matter": "^4.0.3",

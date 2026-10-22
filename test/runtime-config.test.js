@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const vm = require('vm');
 const { spawnSync } = require('child_process');
 const config = require('../lib/config');
 const { prepareRuntime } = require('../lib/campaign-runtime');
@@ -27,6 +28,75 @@ function campaign(t, source = SOURCE) {
     fs.writeFileSync(campaignsPath, JSON.stringify(campaigns));
     return { root, srcPath, campaignDir, configPath, campaignsPath, campaigns };
 }
+
+test('configuration binds commerce despite comment, string and nested-key decoys', t => {
+    const source = `// Example: apiKey: 'COMMENT_DECOY'
+const example = "apiKey: 'STRING_DECOY'";
+window.dataLayer = window.dataLayer || [];
+window.nextReady = window.nextReady || [];
+window.nextConfig = {
+    googleMaps: { apiKey: 'MAPS_KEY' },
+    apiKey /* commerce */ : /* keep spacing */ 'SYNTHETIC_DEMO_KEY',
+    analytics: { enabled: true }
+};
+`;
+    const p = campaign(t, source);
+    prepareRuntime(p.campaignDir);
+    const preview = fs.readFileSync(p.configPath, 'utf8');
+    assert.doesNotMatch(preview, /SYNTHETIC_DEMO_KEY/);
+    let window = {};
+    vm.runInNewContext(preview, { window });
+    assert.equal(window.nextConfig.apiKey, '');
+    assert.equal(window.nextConfig.analytics.enabled, false);
+
+    configureCampaign(p.campaigns, 'preview', 'SYNTHETIC_BOUND_KEY', p);
+    const configured = fs.readFileSync(p.configPath, 'utf8');
+    assert.equal(configured.trimEnd(), source.replace("'SYNTHETIC_DEMO_KEY'", "'SYNTHETIC_BOUND_KEY'").trimEnd());
+    window = {};
+    vm.runInNewContext(configured, { window });
+    assert.equal(window.nextConfig.apiKey, 'SYNTHETIC_BOUND_KEY');
+    assert.equal(window.nextConfig.googleMaps.apiKey, 'MAPS_KEY');
+    assert.equal(window.nextConfig.analytics.enabled, true);
+    assert.equal(JSON.parse(fs.readFileSync(p.campaignsPath)).preview.preview_mode, undefined);
+});
+
+test('ambiguous or dynamic config cannot remove the preview gate or alter the source', t => {
+    const sources = [
+        "window.nextConfig = { apiKey: 'FIRST', apiKey: 'SECOND' };",
+        "window.nextConfig = { apiKey: 'FIRST', ...overrides };",
+        "window.nextConfig = { apiKey: 'FIRST', [field]: 'SECOND' };",
+        "window.nextConfig = { get apiKey() { return 'DYNAMIC'; } };",
+        "window.nextConfig = { apiKey: 'FIRST', other: configure() };",
+        "window.nextConfig = { apiKey: runtimeKey };",
+        "if (ready) window.nextConfig = { apiKey: 'CONDITIONAL' };",
+        `${SOURCE}window.nextConfig = { apiKey: 'SECOND' };`,
+        `${SOURCE}window.nextConfig.apiKey = 'SECOND';`,
+        `${SOURCE}window['nextConfig']['apiKey'] = 'SECOND';`,
+        `${SOURCE}const alias = window.nextConfig; alias.apiKey = 'SECOND';`,
+        `${SOURCE}Object.assign(window.nextConfig, { apiKey: 'SECOND' });`,
+        `${SOURCE}var nextConfig = { apiKey: 'SECOND' };`,
+        `const window = {}; ${SOURCE}`,
+        "const example = { apiKey: 'DECOY' }; window.nextConfig = {};",
+    ];
+    for (const source of sources) {
+        const p = campaign(t, source);
+        const registryBefore = fs.readFileSync(p.campaignsPath);
+        for (const options of [{}, { apiKey: 'SYNTHETIC_BOUND_KEY' }]) {
+            assert.throws(() => prepareRuntime(p.campaignDir, options), error => error.code === 'INVALID_INPUT', source);
+            assert.equal(fs.readFileSync(p.configPath, 'utf8'), source);
+        }
+        assert.throws(() => configureCampaign(p.campaigns, 'preview', 'SYNTHETIC_BOUND_KEY', p), error => error.code === 'INVALID_INPUT', source);
+        assert.equal(fs.readFileSync(p.configPath, 'utf8'), source);
+        assert.deepEqual(fs.readFileSync(p.campaignsPath), registryBefore);
+    }
+});
+
+test('explicit demo retains dynamic template configuration without evaluating it', t => {
+    const source = "window.nextConfig = loadDemoConfig(); throw new Error('must not execute');";
+    const p = campaign(t, source);
+    assert.deepEqual(prepareRuntime(p.campaignDir, { demo: true }), { preview: false, mode: 'demo' });
+    assert.equal(fs.readFileSync(p.configPath, 'utf8'), source);
+});
 
 test('runtime preparation refuses an unrecognized key binding instead of retaining it in a preview', t => {
     for (const source of [
