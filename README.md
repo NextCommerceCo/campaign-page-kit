@@ -103,6 +103,8 @@ Init JSON reports `campaign.runtime_mode: "unconfigured-preview"`, and each buil
 
 To connect later, run `npm run config` and enter the intended Campaign API key. Only after writing the key successfully does this remove `preview_mode` and its analytics override. Rebuild to enable the normal template runtime. If configuring by hand, set the intended key, remove the marked preview override in `assets/config.js`, and remove `preview_mode` from the registry only when ready to enable scripts and tracking.
 
+An explicit boolean `preview_mode: false` also disables the build's static-preview gate; it does not apply a key or remove the runtime override.
+
 For a deliberately connected template demo, pass `--demo` to init. This preserves the template's original configuration and can call its commerce and analytics services. Existing campaigns without `preview_mode` retain their previous build behavior. Preview protection applies to Page Kit output; opening raw source files or using a different build tool does not apply this policy.
 
 `--ai-context` writes the upstream context doc verbatim (with a sentinel header) to wherever the chosen tool auto-loads it: `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/campaign-page-kit.mdc`, or `.github/copilot-instructions.md`.

@@ -133,6 +133,18 @@ test('preview preserves authored CSP policies alongside its first restrictive po
     assert.doesNotMatch(PREVIEW_POLICY, /frame-ancestors|sandbox/);
 });
 
+test('preview removes CSP telemetry while preserving authored enforcement directives', () => {
+    const html = makeStaticPreview(`<head>
+        <meta http-equiv="Content-Security-Policy" content="report-uri https://reports.invalid/csp; img-src 'none'; REPORT-TO telemetry; style-src 'none'; report-uri /report">
+        <meta http-equiv="Content-Security-Policy-Report-Only" content="default-src 'none'; report-to telemetry">
+        <meta http-equiv="content-security-policy-report-only" content="report-uri https://reports.invalid/only">
+    </head>`);
+    const head = parse(html).childNodes.find(n => n.tagName === 'html').childNodes.find(n => n.tagName === 'head');
+    const policies = head.childNodes.filter(node => node.tagName === 'meta' && node.attrs.some(a => a.name === 'http-equiv' && a.value.toLowerCase() === 'content-security-policy'));
+    assert.deepEqual(policies.map(node => node.attrs.find(a => a.name === 'content').value), [PREVIEW_POLICY, "img-src 'none'; style-src 'none'"]);
+    assert.doesNotMatch(html, /report-uri|report-to|report-only|reports\.invalid|telemetry/i);
+});
+
 test('preview handles fragments, refresh, event handlers and nested templates', () => {
     const html = makeStaticPreview('<meta http-equiv="refresh" content="0; url=https://vendor.invalid"><template><script>fetch("https://vendor.invalid")</script></template><img src="local.png" onerror="fetch(1)"><a href="javascript:fetch(1)">Link</a>');
     assert.match(html, /<head><meta http-equiv="Content-Security-Policy"/);
