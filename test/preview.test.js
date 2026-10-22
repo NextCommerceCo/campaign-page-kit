@@ -93,6 +93,82 @@ test('existing campaigns without the preview marker render unchanged', async t =
     assert.doesNotMatch(html, /data-cpk-preview/);
 });
 
+test('preview navigation reaches only rendered pages in its own campaign', async t => {
+    const p = project(t);
+    const source = path.join(p.srcPath, 'preview');
+    fs.writeFileSync(path.join(source, 'assets', 'diagram.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>window.assetScriptRan = true</script></svg>');
+    const links = {
+        fragment: '#details',
+        relative: 'thank-you/',
+        pretty: '/preview/thank-you/',
+        bare: '/preview/thank-you',
+        html: '/preview/thank-you.html?choice=1#details',
+        index: '/preview/thank-you/index.html',
+        permalink: '/custom/preview-finish/',
+        'permalink-html': '/custom/preview-finish.html',
+        svg: '/preview/diagram.svg',
+        'svg-relative': 'diagram.svg',
+        sibling: '/connected/',
+        'other-preview': '/another-preview/',
+        missing: '/preview/missing/',
+        failed: '/preview/failed/',
+        collision: '/preview/collision/',
+        external: 'https://commerce.invalid/checkout',
+    };
+    const markup = Object.entries(links).map(([id, href]) => `<a id="${id}" href="${href}">${id}</a>`).join('\n');
+    fs.writeFileSync(path.join(source, 'index.html'), `---\ntitle: Preview\npage_type: product\n---\n${markup}
+        <map><area id="area" href="/preview/diagram.svg"></map>
+        <svg><a id="svg-link" xlink:href="/preview/diagram.svg">asset</a>
+          <a href="#details"><set attributeName="href" to="/preview/diagram.svg" /></a></svg>`);
+    fs.writeFileSync(path.join(source, 'finish.html'), '---\ntitle: Finish\npage_type: receipt\npermalink: /custom/preview-finish/\n---\n<p>Finish</p>');
+    fs.writeFileSync(path.join(source, 'failed.html'), '---\ntitle: Broken\npage_type: product\n---\n{% unknown_tag %}');
+    fs.writeFileSync(path.join(source, 'collision.html'), '---\ntitle: Collision\npage_type: product\n---\n<p>Preview</p>');
+    fs.mkdirSync(path.join(p.srcPath, 'connected'));
+    fs.writeFileSync(path.join(p.srcPath, 'connected', 'index.html'), '<script>window.connectedScriptRan = true</script>');
+    fs.writeFileSync(path.join(p.srcPath, 'connected', 'collision.html'), '---\npermalink: /preview/collision/\n---\n<script>window.connectedScriptRan = true</script>');
+    fs.mkdirSync(path.join(p.srcPath, 'another-preview'));
+    fs.writeFileSync(path.join(p.srcPath, 'another-preview', 'index.html'), '<p>Another preview</p>');
+    const campaigns = { ...readCampaigns(p), connected: { name: 'Connected' }, 'another-preview': { name: 'Other', preview_mode: true } };
+    const summary = await build({ ...p, campaigns, mode: 'production', files: [
+        'preview/index.html', 'preview/thank-you.html', 'preview/finish.html',
+        'preview/failed.html', 'preview/collision.html',
+        'connected/index.html', 'connected/collision.html', 'another-preview/index.html',
+    ] });
+    assert.equal(summary.errors, 1, 'failed render is excluded from navigable destinations');
+    const html = fs.readFileSync(path.join(p.outputPath, 'preview', 'index.html'), 'utf8');
+    const nodes = new Map();
+    function visit(node) {
+        const id = node.attrs?.find(a => a.name === 'id')?.value;
+        if (id) nodes.set(id, node);
+        for (const child of node.childNodes || []) visit(child);
+    }
+    visit(parse(html));
+    const href = id => nodes.get(id).attrs.find(a => a.name === 'href')?.value;
+    assert.equal(href('fragment'), '#details');
+    for (const id of ['relative', 'pretty', 'bare', 'index']) assert.equal(href(id), '/preview/thank-you/');
+    assert.equal(href('html'), '/preview/thank-you/?choice=1#details');
+    for (const id of ['permalink', 'permalink-html']) assert.equal(href(id), '/custom/preview-finish/');
+    for (const id of ['svg', 'svg-relative', 'sibling', 'other-preview', 'missing', 'failed', 'collision', 'external', 'area', 'svg-link']) {
+        assert.equal(href(id), undefined, `${id} must not leave the current preview campaign`);
+    }
+    assert.doesNotMatch(html, /<set\b/);
+    // Assets and configured siblings are not rewritten; blocking their links is
+    // what keeps top-level navigation under the preview document's policy.
+    assert.match(fs.readFileSync(path.join(p.outputPath, 'preview', 'diagram.svg'), 'utf8'), /assetScriptRan/);
+    assert.match(fs.readFileSync(path.join(p.outputPath, 'connected', 'index.html'), 'utf8'), /connectedScriptRan/);
+});
+
+test('partial preview rebuilds retain navigation between newly rendered campaign pages', async t => {
+    const p = project(t);
+    const campaigns = readCampaigns(p);
+    const summary = await build({ ...p, campaigns, files: ['preview/index.html'] });
+    assert.equal(summary.errors, 0);
+    assert.equal(summary.built, 2);
+    const html = fs.readFileSync(path.join(p.outputPath, 'preview', 'index.html'), 'utf8');
+    assert.match(html, /href="\/preview\/thank-you\/"/);
+    assert.match(fs.readFileSync(path.join(p.outputPath, 'preview', 'thank-you', 'index.html'), 'utf8'), /data-cpk-preview/);
+});
+
 test('malformed preview markers fail closed while explicit boolean false retains normal output', async t => {
     const p = project(t, ['--demo']);
     for (const marker of ['true', 1, 'false', 0, null, '', {}, []]) {
