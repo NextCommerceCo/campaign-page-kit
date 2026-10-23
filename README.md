@@ -43,7 +43,7 @@ npx campaign-init
 4. Asks for your **Campaign name** (display name) and **Campaign slug** (directory + URL path, e.g. `/my-campaign/`)
 5. Downloads only the chosen template's `src/<slug>/` files into your project
 6. Merges the template's registry data into your local `_data/campaigns.json` under your chosen slug
-7. Optionally prompts for your Campaign API key and writes it to `assets/config.js`. Skipping it clears the template's demo key: the pages still build and render, but the SDK does not boot without a key, so nothing is fetched or sent until you run `npm run config`.
+7. Optionally prompts for your Campaign API key and writes it to `assets/config.js`. Skipping it clears the template's demo key: the pages still build and render, but the SDK does not boot without a key, so there are no commerce calls and no analytics events until you run `npm run config`. Vendor tracking set per slug in `_data/campaigns.json` loads independently of the key.
 8. Optionally offers to set up **AI context** for your editor or agent — installs the upstream context doc to the right location for your tool:
    - **Claude Code** → `CLAUDE.md` at the project root
    - **OpenAI Codex** → `AGENTS.md` at the project root
