@@ -182,6 +182,20 @@ test('applyApiKey: targets the shallowest apiKey, not the first one in the file'
     assert.match(out, /apiKey: "DEEP"/);
 });
 
+test('applyApiKey: ignores braces inside strings and comments when ranking depth', () => {
+    const source = "// { stray brace in a comment }\nwindow.nextConfig = {\n  googleMaps: { apiKey: 'MAPS' },\n  promotion: '} {',\n  /* } */ apiKey: 'DEMO'\n};";
+    const out = applyApiKey(source, 'NEW');
+    assert.match(out, /googleMaps: \{ apiKey: 'MAPS' \}/);
+    assert.match(out, /apiKey: 'NEW'/);
+    assert.doesNotMatch(out, /DEMO/);
+});
+
+test('applyApiKey: handles escaped quotes in the value and escapes them in the new key', () => {
+    const out = applyApiKey("window.nextConfig = { apiKey: 'DEMO\\'S KEY', other: \"x\" };", "it's");
+    assert.equal(out, "window.nextConfig = { apiKey: 'it\\'s', other: \"x\" };");
+    assert.equal(applyApiKey("window.nextConfig = { apiKey: \"a\\\"b\" };", 'k'), "window.nextConfig = { apiKey: 'k' };");
+});
+
 test('applyApiKey: returns null for a dynamic binding and keeps the source when the value is unchanged', () => {
     assert.equal(applyApiKey('window.nextConfig = { apiKey: process.env.KEY };', 'k'), null);
     assert.equal(applyApiKey("window.nextConfig = { apiKey: '' };", ''), "window.nextConfig = { apiKey: '' };");
